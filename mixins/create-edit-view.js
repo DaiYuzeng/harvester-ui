@@ -4,6 +4,7 @@ import { LAST_NAMESPACE } from '@/store/prefs';
 import { LABEL_PREFIX_TO_IGNORE, ANNOTATIONS_TO_IGNORE_CONTAINS, ANNOTATIONS_TO_IGNORE_PREFIX } from '@/config/labels-annotations';
 import { matchesSomePrefix, containsSomeString } from '@/utils/string';
 import { exceptionToErrorsArray } from '@/utils/error';
+import isFunction from 'lodash/isFunction';
 import ChildHook, { BEFORE_SAVE_HOOKS, AFTER_SAVE_HOOKS } from './child-hook';
 
 export default {
@@ -24,6 +25,10 @@ export default {
       type:     Object,
       default: null,
     },
+  },
+
+  mounted() {
+    this.rules = Object.assign({}, this.defaultRules, this.rules);
   },
 
   data() {
@@ -48,13 +53,29 @@ export default {
       v.metadata.labels = {};
     }
 
+    const validateName = (rule, value, callback) => {
+      if (value.length >= 63) {
+        return callback(new Error(this.$store.getters['i18n/t']('validation.custom.tooLongName', { max: 63 })));
+      }
+
+      callback();
+    };
+
     // keep label and annotation filters in data so each resource CRUD page can alter individiaully
     return {
       errors:                      null,
       labelPrefixToIgnore:         LABEL_PREFIX_TO_IGNORE,
       annotationsToIgnoreContains: ANNOTATIONS_TO_IGNORE_CONTAINS,
-      annotationsToIgnorePrefix:   ANNOTATIONS_TO_IGNORE_PREFIX
+      annotationsToIgnorePrefix:   ANNOTATIONS_TO_IGNORE_PREFIX,
 
+      formName:      'form',
+      rules:         {},
+      defaultRules:  {
+        name: [
+          { required: true, message: this.$store.getters['i18n/t']('validation.required', { key: 'Name' }) },
+          { validator: validateName, trigger: 'blur' }]
+      },
+      needsValidate: false,
     };
   },
 
@@ -141,6 +162,23 @@ export default {
       this.$router.replace({
         name:   this.doneRoute,
         params: this.doneParams || { resource: this.value.type }
+      });
+    },
+
+    beforeSave(buttonCb) {
+      if (!this.needsValidate) {
+        return this.save(buttonCb);
+      }
+
+      this.$refs[this.formName].validate((valid) => {
+        if (valid) {
+          if (isFunction(this.afterValidate)) {
+            this.afterValidate();
+          }
+          this.save(buttonCb);
+        } else {
+          return buttonCb(false);
+        }
       });
     },
 
