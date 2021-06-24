@@ -15,7 +15,6 @@ const PLAN_SORTS = {
 };
 
 const VALID_IMAGES = [
-  /^rancheros$/,
   /^centos-\d+-x64$/,
   /^debian-\d+-x64$/,
   /^fedora-\d+-x64$/,
@@ -79,7 +78,7 @@ export const actions = {
         value:    size.slug
       };
 
-      out.label = rootGetters['i18n/t']('cluster.nodeConfig.digitalocean.sizeLabel', out);
+      out.label = rootGetters['i18n/t']('cluster.machineConfig.digitalocean.sizeLabel', out);
 
       return out;
     }).filter(size => size.plan !== 'other');

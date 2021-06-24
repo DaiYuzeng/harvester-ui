@@ -141,9 +141,18 @@ export default {
         if (this.isExpanded && !skipAutoClose) {
           const items = this.group[this.childrenKey];
 
-          // Navigate to the first item in the group
+          // Navigate to one of the child items (by default the first child)
           if (items && items.length > 0) {
-            const route = items[0].route;
+            let index = 0;
+
+            // If there is a default type, use it
+            if (this.group.defaultType) {
+              const found = items.findIndex(i => i.name === this.group.defaultType);
+
+              index = (found === -1) ? 0 : found;
+            }
+
+            const route = items[index].route;
 
             this.$router.replace(route);
           }
@@ -186,7 +195,7 @@ export default {
           />
         </li>
         <Type
-          v-else-if="!child.overview"
+          v-else-if="!child.overview || group.name === 'starred'"
           :key="id+'_' + child.name + '_type'"
           :is-root="depth == 0 && !showHeader"
           :type="child"
@@ -204,7 +213,7 @@ export default {
     font-size: 14px;
     position: relative;
     cursor: pointer;
-    color: var(--input-label);
+    color: var(--body-text);
 
     > H6 {
       color: var(--body-text);

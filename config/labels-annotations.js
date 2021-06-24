@@ -9,6 +9,8 @@ export const CONTAINER_DEFAULT_RESOURCE_LIMIT = 'field.cattle.io/containerDefaul
 export const CATTLE_PUBLIC_ENDPOINTS = 'field.cattle.io/publicEndpoints';
 export const TARGET_WORKLOADS = 'field.cattle.io/targetWorkloadIds';
 export const UI_MANAGED = 'management.cattle.io/ui-managed';
+export const CREATOR_ID = 'field.cattle.io/creatorId';
+export const CREATOR_OWNER_BINDING = 'authz.management.cattle.io/creator-owner-binding';
 
 export const KUBERNETES = {
   SERVICE_ACCOUNT_UID:  'kubernetes.io/service-account.uid',
@@ -28,9 +30,10 @@ export const STORAGE = {
 };
 
 export const NODE_ROLES = {
-  CONTROL_PLANE: 'node-role.kubernetes.io/controlplane',
-  WORKER:        'node-role.kubernetes.io/worker',
-  ETCD:          'node-role.kubernetes.io/etcd',
+  CONTROL_PLANE_OLD: 'node-role.kubernetes.io/controlplane',
+  CONTROL_PLANE:     'node-role.kubernetes.io/control-plane',
+  WORKER:            'node-role.kubernetes.io/worker',
+  ETCD:              'node-role.kubernetes.io/etcd',
 };
 
 export const CAPI = {

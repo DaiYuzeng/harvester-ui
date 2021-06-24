@@ -1,10 +1,12 @@
 import {
   CONFIG_MAP,
-  NAMESPACE, NODE, SECRET, INGRESS,
+  NODE, SECRET, INGRESS,
   WORKLOAD, WORKLOAD_TYPES, SERVICE, HPA, NETWORK_POLICY, PV, PVC, STORAGE_CLASS, POD,
   RBAC,
   MANAGEMENT,
+  NAMESPACE,
   NORMAN,
+  VIRTUAL_TYPES,
 } from '@/config/types';
 
 import {
@@ -14,7 +16,7 @@ import {
   USER_ID, USERNAME, USER_DISPLAY_NAME, USER_PROVIDER, WORKLOAD_ENDPOINTS, STORAGE_CLASS_DEFAULT,
   STORAGE_CLASS_PROVISIONER, PERSISTENT_VOLUME_SOURCE,
   HPA_REFERENCE, MIN_REPLICA, MAX_REPLICA, CURRENT_REPLICA,
-  ACCESS_KEY, DESCRIPTION, EXPIRES, EXPIRY_STATE, SUB_TYPE, AGE_NORMAN, SCOPE_NORMAN,
+  ACCESS_KEY, DESCRIPTION, EXPIRES, EXPIRY_STATE, SUB_TYPE, AGE_NORMAN, SCOPE_NORMAN, PERSISTENT_VOLUME_CLAIM
 } from '@/config/table-headers';
 
 import { DSL } from '@/store/type-map';
@@ -33,6 +35,7 @@ export function init(store) {
     virtualType,
     componentForType,
     configureType,
+    setGroupDefaultType,
   } = DSL(store, NAME);
 
   product({
@@ -40,7 +43,11 @@ export function init(store) {
     weight:              3,
     showNamespaceFilter: true,
     icon:                'compass',
-    typeStoreMap:        { [MANAGEMENT.PROJECT]: 'management' }
+    typeStoreMap:        {
+      [MANAGEMENT.PROJECT]:                       'management',
+      [MANAGEMENT.CLUSTER_ROLE_TEMPLATE_BINDING]: 'management',
+      [MANAGEMENT.PROJECT_ROLE_TEMPLATE_BINDING]: 'management'
+    }
   });
 
   basicType(['cluster-dashboard', 'cluster-tools']);
@@ -77,6 +84,7 @@ export function init(store) {
     RBAC.CLUSTER_ROLE,
     RBAC.ROLE_BINDING,
     RBAC.CLUSTER_ROLE_BINDING,
+    'cluster-members',
   ], 'rbac');
 
   weightGroup('cluster', 99, true);
@@ -94,6 +102,8 @@ export function init(store) {
   ignoreType('extensions.ingress'); // Old, moved into networking
   ignoreType(MANAGEMENT.PROJECT);
   ignoreType(NAMESPACE);
+  ignoreType(MANAGEMENT.CLUSTER_ROLE_TEMPLATE_BINDING);
+  ignoreType(MANAGEMENT.PROJECT_ROLE_TEMPLATE_BINDING);
 
   mapGroup(/^(core)?$/, 'Core');
   mapGroup('apps', 'Apps');
@@ -122,11 +132,15 @@ export function init(store) {
   mapGroup('logging.banzaicloud.io', 'Logging');
   mapGroup(/.*resources\.cattle\.io.*/, 'Backup-Restore');
   mapGroup(/^(.*\.)?cluster\.x-k8s\.io$/, 'Cluster Provisioning');
-  mapGroup(/^(aks|eks|gke|rke|rke-node|provisioning)\.cattle\.io$/, 'Cluster Provisioning');
+  mapGroup(/^(aks|eks|gke|rke|rke-machine-config|provisioning)\.cattle\.io$/, 'Cluster Provisioning');
 
   configureType(NODE, { isCreatable: false, isEditable: false });
   configureType(WORKLOAD_TYPES.JOB, { isEditable: false, match: WORKLOAD_TYPES.JOB });
   configureType(PVC, { isEditable: false });
+  configureType(MANAGEMENT.CLUSTER_ROLE_TEMPLATE_BINDING, { isEditable: false });
+  configureType(MANAGEMENT.PROJECT_ROLE_TEMPLATE_BINDING, { isEditable: false });
+
+  setGroupDefaultType('serviceDiscovery', SERVICE);
 
   configureType('workload', {
     displayName: 'Workload',
@@ -137,7 +151,7 @@ export function init(store) {
     resource: WORKLOAD_TYPES.DEPLOYMENT
   });
 
-  headers(PV, [STATE, NAME_COL, PERSISTENT_VOLUME_SOURCE, AGE]);
+  headers(PV, [STATE, NAME_COL, PERSISTENT_VOLUME_CLAIM, PERSISTENT_VOLUME_SOURCE, AGE]);
   headers(CONFIG_MAP, [NAME_COL, NAMESPACE_COL, KEYS, AGE]);
   headers(SECRET, [
     STATE,
@@ -154,7 +168,7 @@ export function init(store) {
   ]);
   headers(INGRESS, [STATE, NAME_COL, NAMESPACE_COL, INGRESS_TARGET, INGRESS_DEFAULT_BACKEND, AGE]);
   headers(NODE, [STATE, NAME_COL, ROLES, VERSION, INTERNAL_EXTERNAL_IP, CPU, RAM, AGE]);
-  headers(SERVICE, [STATE, NAME_COL, NAMESPACE_COL, SPEC_TYPE, TARGET_PORT, SELECTOR, AGE]);
+  headers(SERVICE, [STATE, NAME_COL, NAMESPACE_COL, TARGET_PORT, SELECTOR, SPEC_TYPE, AGE]);
   headers(HPA, [STATE, NAME_COL, HPA_REFERENCE, MIN_REPLICA, MAX_REPLICA, CURRENT_REPLICA, AGE]);
 
   headers(WORKLOAD, [STATE, NAME_COL, NAMESPACE_COL, WORKLOAD_IMAGES, WORKLOAD_ENDPOINTS, TYPE, 'Ready', AGE]);
@@ -200,7 +214,7 @@ export function init(store) {
   ]);
 
   virtualType({
-    label:       'Cluster Dashboard',
+    label:       store.getters['i18n/t']('clusterIndexPage.header'),
     group:      'Root',
     namespaced:  false,
     name:        'cluster-dashboard',
@@ -211,10 +225,25 @@ export function init(store) {
   });
 
   virtualType({
-    label:          'Overview',
-    group:          'Workload',
+    label:       store.getters['i18n/t']('members.clusterMembers'),
+    group:      'rbac',
+    namespaced:  false,
+    name:        VIRTUAL_TYPES.CLUSTER_MEMBERS,
+    icon:       'globe',
+    weight:      100,
+    route:       { name: 'c-cluster-explorer-members' },
+    exact:       true,
+    ifHaveType:  {
+      type:   MANAGEMENT.CLUSTER_ROLE_TEMPLATE_BINDING,
+      store: 'management'
+    }
+  });
+
+  virtualType({
+    label:          store.getters['i18n/t'](`typeLabel.${ WORKLOAD }`, { count: 2 }),
+    group:          store.getters['i18n/t'](`typeLabel.${ WORKLOAD }`, { count: 2 }),
     namespaced:     true,
-    name:           'workload',
+    name:           WORKLOAD,
     weight:         99,
     icon:           'folder',
     ifHaveSubTypes: Object.values(WORKLOAD_TYPES),
@@ -226,24 +255,24 @@ export function init(store) {
   });
 
   virtualType({
-    label:            'Projects/Namespaces',
+    label:            store.getters['i18n/t']('projectNamespaces.label'),
     group:            'cluster',
     icon:             'globe',
     namespaced:       false,
     ifRancherCluster: true,
-    name:             'projects-namespaces',
+    name:             VIRTUAL_TYPES.PROJECT_NAMESPACES,
     weight:           98,
     route:            { name: 'c-cluster-product-projectsnamespaces' },
     exact:            true,
   });
 
   virtualType({
-    label:            'Namespaces',
+    label:            store.getters['i18n/t'](`typeLabel.${ NAMESPACE }`, { count: 2 }),
     group:            'cluster',
     icon:             'globe',
     namespaced:       false,
     ifRancherCluster: false,
-    name:             'namespaces',
+    name:             VIRTUAL_TYPES.NAMESPACES,
     weight:           98,
     route:            { name: 'c-cluster-product-namespaces' },
     exact:            true,

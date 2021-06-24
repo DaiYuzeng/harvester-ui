@@ -2,14 +2,11 @@
 import Loading from '@/components/Loading';
 import DashboardMetrics from '@/components/DashboardMetrics';
 import { mapGetters } from 'vuex';
-import isEmpty from 'lodash/isEmpty';
 import SortableTable from '@/components/SortableTable';
 import { allHash } from '@/utils/promise';
 import AlertTable from '@/components/AlertTable';
 import Banner from '@/components/Banner';
-import {
-  parseSi, formatSi, exponentNeeded, UNITS, createMemoryFormat, MEMORY_PARSE_RULES
-} from '@/utils/units';
+import { parseSi, createMemoryValues } from '@/utils/units';
 import {
   NAME,
   REASON,
@@ -31,11 +28,13 @@ import {
 } from '@/config/types';
 import { findBy } from '@/utils/array';
 import { mapPref, CLUSTER_TOOLS_TIP } from '@/store/prefs';
+import { haveV1Monitoring, monitoringStatus } from '@/utils/monitoring';
 import Tabbed from '@/components/Tabbed';
 import Tab from '@/components/Tabbed/Tab';
 import { allDashboardsExist } from '@/utils/grafana';
 import EtcdInfoBanner from '@/components/EtcdInfoBanner';
 import metricPoller from '@/mixins/metric-poller';
+import EmberPage from '@/components/EmberPage';
 import ResourceSummary, { resourceCounts } from './ResourceSummary';
 import HardwareResourceGauge from './HardwareResourceGauge';
 
@@ -60,6 +59,7 @@ export default {
     Tabbed,
     AlertTable,
     Banner,
+    EmberPage,
   },
 
   mixins: [metricPoller],
@@ -75,7 +75,7 @@ export default {
     }
 
     if ( this.$store.getters['management/schemaFor'](MANAGEMENT.NODE_POOL) ) {
-      hash.nodePools = this.$store.dispatch('management/findAll', { type: MANAGEMENT.NODE_POOL });
+      hash.rke1NodePools = this.$store.dispatch('management/findAll', { type: MANAGEMENT.NODE_POOL });
     }
 
     this.showClusterMetrics = await allDashboardsExist(this.$store.dispatch, this.currentCluster.id, [CLUSTER_METRICS_DETAIL_URL, CLUSTER_METRICS_SUMMARY_URL]);
@@ -87,6 +87,7 @@ export default {
     for ( const k in res ) {
       this[k] = res[k];
     }
+    this.metricAggregations = await this.currentCluster.fetchNodeMetrics();
   },
 
   data() {
@@ -133,9 +134,9 @@ export default {
       constraints:         [],
       events:              [],
       nodeMetrics:         [],
-      nodePools:           [],
       nodeTemplates:       [],
       nodes:               [],
+      metricAggregations: {},
       showClusterMetrics: false,
       showK8sMetrics:     false,
       showEtcdMetrics:    false,
@@ -151,11 +152,21 @@ export default {
 
   computed: {
     ...mapGetters(['currentCluster']),
+    ...monitoringStatus(),
 
     hideClusterToolsTip: mapPref(CLUSTER_TOOLS_TIP),
 
+    hasV1Monitoring() {
+      return haveV1Monitoring(this.$store.getters);
+    },
+
+    v1MonitoringURL() {
+      return `/k/${ this.currentCluster.id }/monitoring`;
+    },
+
     displayProvider() {
       const other = 'other';
+
       let provider = this.currentCluster.status.provider || other;
 
       if (provider === 'rke.windows') {
@@ -212,32 +223,7 @@ export default {
     },
 
     ramReserved() {
-      return this.createMemoryValues(this.currentCluster?.status?.allocatable?.memory, this.currentCluster?.status?.requested?.memory);
-    },
-
-    metricAggregations() {
-      const nodes = this.nodes;
-      const someNonWorkerRoles = this.nodes.some(node => node.hasARole && !node.isWorker);
-      const metrics = this.nodeMetrics.filter((nodeMetrics) => {
-        const node = nodes.find(nd => nd.id === nodeMetrics.id);
-
-        return node && (!someNonWorkerRoles || node.isWorker);
-      });
-      const initialAggregation = {
-        cpu:    0,
-        memory: 0
-      };
-
-      if (isEmpty(metrics)) {
-        return null;
-      }
-
-      return metrics.reduce((agg, metric) => {
-        agg.cpu += parseSi(metric.usage.cpu);
-        agg.memory += parseSi(metric.usage.memory);
-
-        return agg;
-      }, initialAggregation);
+      return createMemoryValues(this.currentCluster?.status?.allocatable?.memory, this.currentCluster?.status?.requested?.memory);
     },
 
     cpuUsed() {
@@ -248,7 +234,7 @@ export default {
     },
 
     ramUsed() {
-      return this.createMemoryValues(this.currentCluster?.status?.capacity?.memory, this.metricAggregations?.memory);
+      return createMemoryValues(this.currentCluster?.status?.capacity?.memory, this.metricAggregations?.memory);
     },
 
     hasMonitoring() {
@@ -269,26 +255,6 @@ export default {
   },
 
   methods: {
-    createMemoryValues(total, useful) {
-      const parsedTotal = parseSi((total || '0').toString());
-      const parsedUseful = parseSi((useful || '0').toString());
-      const format = createMemoryFormat(parsedTotal);
-      const formattedTotal = formatSi(parsedTotal, format);
-      const formattedUseful = formatSi(parsedUseful, format);
-
-      return {
-        total:  Number.parseFloat(formattedTotal),
-        useful: Number.parseFloat(formattedUseful),
-        units:  this.createMemoryUnits(parsedTotal)
-      };
-    },
-
-    createMemoryUnits(n) {
-      const exponent = exponentNeeded(n, MEMORY_PARSE_RULES.memory.format.increment);
-
-      return `${ UNITS[exponent] }${ MEMORY_PARSE_RULES.memory.format.suffix }`;
-    },
-
     showActions() {
       this.$store.commit('action-menu/show', {
         resources: this.currentCluster,
@@ -362,10 +328,14 @@ export default {
         <span><LiveDate :value="currentCluster.metadata.creationTimestamp" :add-suffix="true" :show-tooltip="true" /></span>
       </div>
       <div :style="{'flex':1}" />
-      <div v-if="hasMonitoring && false">
-        <n-link :to="{name: 'c-cluster-monitoring'}">
-          {{ t('glance.monitoringDashboard') }}
+      <div v-if="!monitoringStatus.v2 && !monitoringStatus.v1">
+        <n-link :to="{name: 'c-cluster-explorer-tools'}" class="monitoring-install">
+          <i class="icon icon-gear" />
+          <span>{{ t('glance.installMonitoring') }}</span>
         </n-link>
+      </div>
+      <div v-if="monitoringStatus.v1">
+        <span>{{ t('glance.v1MonitoringInstalled') }}</span>
       </div>
     </div>
 
@@ -375,13 +345,17 @@ export default {
       <ResourceSummary v-if="canAccessDeployments" resource="apps.deployment" />
     </div>
 
-    <h3 class="mt-40">
+    <h3 v-if="!hasV1Monitoring" class="mt-40">
       {{ t('clusterIndexPage.sections.capacity.label') }}
     </h3>
-    <div class="hardware-resource-gauges">
+    <div v-if="!hasV1Monitoring" class="hardware-resource-gauges">
       <HardwareResourceGauge :name="t('clusterIndexPage.hardwareResourceGauge.pods')" :used="podsUsed" />
       <HardwareResourceGauge :name="t('clusterIndexPage.hardwareResourceGauge.cores')" :reserved="cpuReserved" :used="cpuUsed" />
       <HardwareResourceGauge :name="t('clusterIndexPage.hardwareResourceGauge.ram')" :reserved="ramReserved" :used="ramUsed" :units="ramReserved.units" />
+    </div>
+
+    <div v-if="hasV1Monitoring" id="ember-anchor" class="mt-20">
+      <EmberPage inline="ember-anchor" :src="v1MonitoringURL" />
     </div>
 
     <div class="mb-40 mt-40">
@@ -454,7 +428,7 @@ export default {
   padding: 20px 0px;
   display: flex;
 
-  &>*{
+  &>*:not(:last-child) {
     margin-right: 40px;
 
     & SPAN {
@@ -488,5 +462,18 @@ export default {
 
 .cluster-tools-tip {
   margin-top: 0;
+}
+
+.monitoring-install {
+  display: flex;
+
+  > I {
+    line-height: inherit;
+    margin-right: 4px;
+  }
+
+  &:focus {
+    outline: 0;
+  }
 }
 </style>

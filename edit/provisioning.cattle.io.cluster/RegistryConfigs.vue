@@ -46,7 +46,11 @@ export default {
   },
 
   computed: {
-    TLS: TYPES.TLS,
+    TLS: {
+      get() {
+        return TYPES.TLS;
+      },
+    },
 
     defaultAddValue() {
       return {
@@ -104,6 +108,7 @@ export default {
             <SelectOrCreateAuthSecret
               v-model="row.value.authConfigSecretName"
               :register-before-hook="registerBeforeHook"
+              in-store="management"
               :allow-ssh="false"
               :vertical="true"
               :namespace="value.metadata.namespace"

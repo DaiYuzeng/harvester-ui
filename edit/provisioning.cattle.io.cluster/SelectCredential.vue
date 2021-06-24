@@ -87,9 +87,7 @@ export default {
       let driver = this.provider;
 
       // Map providers that share a common credential to one driver
-      if ( driver === 'amazonec2' || driver === 'amazoneks' ) {
-        driver = 'aws';
-      }
+      driver = this.$store.getters['plugins/credentialDriverFor'](driver);
 
       return driver;
     },
@@ -130,7 +128,13 @@ export default {
     },
 
     createComponent() {
-      return importCloudCredential(this.driverName);
+      const haveDrivers = this.$store.getters['plugins/credentialDrivers'];
+
+      if ( haveDrivers.includes(this.driverName) ) {
+        return importCloudCredential(this.driverName);
+      }
+
+      return importCloudCredential('generic');
     },
 
     validationPassed() {
@@ -232,13 +236,15 @@ export default {
         name-label="cluster.credential.name.label"
         name-placeholder="cluster.credential.name.placeholder"
         :name-required="false"
-        :mode="mode"
+        mode="create"
       />
 
       <component
         :is="createComponent"
         ref="create"
         v-model="newCredential"
+        mode="create"
+        :driver-name="driverName"
         @validationChanged="createValidationChanged"
       />
     </div>

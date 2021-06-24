@@ -10,6 +10,7 @@ import CountGauge from '@/components/CountGauge';
 import { allHash } from '@/utils/promise';
 import { get } from '@/utils/object';
 import DashboardMetrics from '@/components/DashboardMetrics';
+import V1WorkloadMetrics from '@/mixins/v1-workload-metrics';
 import { mapGetters } from 'vuex';
 import { allDashboardsExist } from '@/utils/grafana';
 
@@ -26,6 +27,12 @@ export const WORKLOAD_TYPE_TO_KIND_MAPPING = {
   [WORKLOAD_TYPES.REPLICATION_CONTROLLER]: 'ReplicationController',
 };
 
+const METRICS_SUPPORTED_KINDS = [
+  WORKLOAD_TYPES.DAEMON_SET,
+  WORKLOAD_TYPES.REPLICA_SET,
+  WORKLOAD_TYPES.STATEFUL_SET
+];
+
 export default {
   components: {
     DashboardMetrics,
@@ -36,7 +43,7 @@ export default {
     SortableTable
   },
 
-  mixins: [CreateEditView],
+  mixins: [CreateEditView, V1WorkloadMetrics],
 
   async fetch() {
     const hash = { allPods: this.$store.dispatch('cluster/findAll', { type: POD }) };
@@ -50,7 +57,9 @@ export default {
       this[k] = res[k];
     }
 
-    this.showMetrics = await allDashboardsExist(this.$store.dispatch, this.currentCluster.id, [WORKLOAD_METRICS_DETAIL_URL, WORKLOAD_METRICS_SUMMARY_URL]);
+    const isMetricsSupportedKind = METRICS_SUPPORTED_KINDS.includes(this.value.type);
+
+    this.showMetrics = isMetricsSupportedKind && await allDashboardsExist(this.$store.dispatch, this.currentCluster.id, [WORKLOAD_METRICS_DETAIL_URL, WORKLOAD_METRICS_SUMMARY_URL]);
   },
 
   data() {
@@ -227,7 +236,7 @@ export default {
       return {
         namespace: this.value.namespace,
         kind:      WORKLOAD_TYPE_TO_KIND_MAPPING[this.value.type],
-        workload:  this.value.id
+        workload:  this.value.shortId
       };
     }
   },
@@ -295,6 +304,11 @@ export default {
             graph-height="550px"
           />
         </template>
+      </Tab>
+      <Tab v-if="v1MonitoringUrl" name="v1Metrics" :label="t('node.detail.tab.metrics')" :weight="10">
+        <div id="ember-anchor">
+          <EmberPage inline="ember-anchor" :src="v1MonitoringUrl" />
+        </div>
       </Tab>
     </ResourceTabs>
   </div>

@@ -12,6 +12,7 @@ export default {
   <div class="row">
     <div class="col span-6">
       <Checkbox
+        :mode="mode"
         :label="displayLabel"
         :value="value"
         @input="$emit('input', $event)"

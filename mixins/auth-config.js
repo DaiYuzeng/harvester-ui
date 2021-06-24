@@ -27,7 +27,12 @@ export default {
     const serverUrl = await this.$store.dispatch('management/find', {
       type: MANAGEMENT.SETTING,
       id:   'server-url',
-      opt:  { url: `/v1/{ MANAGEMENT.SETTING }/server-url` }
+      opt:  { url: `/v1/${ MANAGEMENT.SETTING }/server-url` }
+    });
+
+    this.principals = await this.$store.dispatch('rancher/findAll', {
+      type: NORMAN.PRINCIPAL,
+      opt:  { url: '/v3/principals', force: true }
     });
 
     if ( serverUrl ) {
@@ -56,16 +61,11 @@ export default {
       serverSetting: null,
       errors:        null,
       originalModel: null,
+      principals:    []
     };
   },
 
   computed: {
-    me() {
-      const out = findBy(this.principals, 'me', true);
-
-      return out;
-    },
-
     doneLocationOverride() {
       return {
         name:   this.$route.name,
@@ -88,7 +88,7 @@ export default {
     },
 
     principal() {
-      return this.$store.getters['rancher/byId'](NORMAN.PRINCIPAL, this.$store.getters['auth/principalId']) || {};
+      return findBy(this.principals, 'me', true) || {};
     },
 
     displayName() {
@@ -160,12 +160,12 @@ export default {
 
           this.model.allowedPrincipalIds = this.model.allowedPrincipalIds || [];
 
-          if ( this.me) {
-            if (!this.model.allowedPrincipalIds.includes(this.me.id) ) {
-              addObject(this.model.allowedPrincipalIds, this.me.id);
+          if ( this.principal) {
+            if (!this.model.allowedPrincipalIds.includes(this.principal.id) ) {
+              addObject(this.model.allowedPrincipalIds, this.principal.id);
             }
             // Session has switched to new 'me', ensure we react
-            this.$store.commit('auth/loggedInAs', this.me.id);
+            this.$store.commit('auth/loggedInAs', this.principal.id);
           } else {
             console.warn(`Unable to find principal marked as 'me'`); // eslint-disable-line no-console
           }
@@ -203,6 +203,10 @@ export default {
         // Covers case where user disables... then enables in same visit to page
         this.applyDefaults();
 
+        this.principals = await this.$store.dispatch('rancher/findAll', {
+          type: NORMAN.PRINCIPAL,
+          opt:  { url: '/v3/principals', force: true }
+        });
         this.showLdap = false;
         btnCb(true);
       } catch (err) {

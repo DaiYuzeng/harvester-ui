@@ -2,17 +2,19 @@
 import BrandImage from '@/components/BrandImage';
 import RancherProviderIcon from '@/components/RancherProviderIcon';
 import { mapGetters } from 'vuex';
+import $ from 'jquery';
 import { MANAGEMENT } from '@/config/types';
-import { mapPref, DEV } from '@/store/prefs';
+import { mapPref, DEV, MENU_MAX_CLUSTERS } from '@/store/prefs';
 import { sortBy } from '@/utils/sort';
 import { ucFirst } from '@/utils/string';
 import { KEY } from '@/utils/platform';
 import { getVersionInfo } from '@/utils/version';
+import { LEGACY } from '@/store/features';
+import { SETTING } from '@/config/settings';
 
 const UNKNOWN = 'unknown';
 const UI_VERSION = process.env.VERSION || UNKNOWN;
 const UI_COMMIT = process.env.COMMIT || UNKNOWN;
-const MAX_CLUSTERS_TO_SHOW = 4;
 
 export default {
 
@@ -37,6 +39,7 @@ export default {
       'currentProduct', 'backToRancherLink', 'backToRancherGlobalLink']),
     ...mapGetters('type-map', ['activeProducts']),
     ...mapGetters('i18n', ['selectedLocaleLabel', 'availableLocales']),
+    ...mapGetters({ features: 'features/get' }),
 
     value: {
       get() {
@@ -44,10 +47,14 @@ export default {
       },
     },
 
+    legacyEnabled() {
+      return this.features(LEGACY);
+    },
+
     showClusterSearch() {
       const all = this.$store.getters['management/all'](MANAGEMENT.CLUSTER);
 
-      return all.length > MAX_CLUSTERS_TO_SHOW;
+      return all.length > this.maxClustersToShow;
     },
 
     clusters() {
@@ -74,6 +81,8 @@ export default {
 
     dev: mapPref(DEV),
 
+    maxClustersToShow: mapPref(MENU_MAX_CLUSTERS),
+
     showLocale() {
       return Object.keys(this.availableLocales).length > 1 || this.dev;
     },
@@ -85,7 +94,13 @@ export default {
     multiClusterApps() {
       const options = this.options;
 
-      return options.filter(opt => opt.inStore === 'management' && opt.category !== 'configuration');
+      return options.filter(opt => opt.inStore === 'management' && opt.category !== 'configuration' && opt.category !== 'legacy');
+    },
+
+    legacyApps() {
+      const options = this.options;
+
+      return options.filter(opt => opt.inStore === 'management' && opt.category === 'legacy');
     },
 
     configurationApps() {
@@ -122,13 +137,31 @@ export default {
       });
 
       return entries;
+    },
+
+    showSupportLink() {
+      const hasSupport = this.$store.getters['management/byId'](MANAGEMENT.SETTING, SETTING.SUPPORTED )?.value;
+
+      if (hasSupport === 'true') {
+        const canEditSettings = (this.$store.getters['management/schemaFor'](MANAGEMENT.SETTING)?.resourceMethods || []).includes('PATCH');
+
+        if (canEditSettings) {
+          return { name: 'support' };
+        } else {
+          const uiIssues = this.$store.getters['management/byId'](MANAGEMENT.SETTING, SETTING.UI_ISSUES )?.value;
+
+          return uiIssues || null;
+        }
+      }
+
+      return { name: 'support' };
     }
   },
 
   watch: {
     $route() {
       this.shown = false;
-    }
+    },
   },
 
   mounted() {
@@ -140,6 +173,18 @@ export default {
   },
 
   methods: {
+    // Cluster list number of items shown is configurbale via user preference
+    setClusterListHeight(maxToShow) {
+      const el = this.$refs.clusterList;
+      const max = Math.min(maxToShow, this.clusters.length);
+
+      if (el) {
+        const $el = $(el);
+        const h = 32 * max;
+
+        $el.css('height', `${ h }px`);
+      }
+    },
     handler(e) {
       if (e.keyCode === KEY.ESCAPE ) {
         this.hide();
@@ -152,6 +197,9 @@ export default {
 
     toggle() {
       this.shown = !this.shown;
+      this.$nextTick(() => {
+        this.setClusterListHeight(this.maxClustersToShow);
+      });
     },
 
     switchLocale(locale) {
@@ -197,18 +245,18 @@ export default {
             />
             <i v-if="clusterFilter.length > 0" class="icon icon-close" @click="clusterFilter=''" />
           </div>
-          <div class="clusters" :class="{'fixed-height': showClusterSearch}">
+          <div ref="clusterList" class="clusters">
             <div v-for="c in clusters" :key="c.id" @click="hide()">
               <nuxt-link
                 v-if="c.ready"
                 class="cluster selector option"
                 :to="{ name: 'c-cluster', params: { cluster: c.id } }"
               >
-                <RancherProviderIcon v-if="c.isLocal" width="25" class="rancher-provider-icon" />
+                <RancherProviderIcon v-if="c.isLocal" width="24" class="rancher-provider-icon" />
                 <img v-else :src="c.logo" />
                 <div>{{ c.label }}</div>
               </nuxt-link>
-              <span v-else class="cluster selector disabled">
+              <span v-else class="option-disabled cluster selector disabled">
                 <img :src="c.logo" />
                 <div>{{ c.label }}</div>
               </span>
@@ -222,6 +270,23 @@ export default {
               {{ t('nav.categories.multiCluster') }}
             </div>
             <div v-for="a in multiClusterApps" :key="a.label" @click="hide()">
+              <nuxt-link class="option" :to="a.to">
+                <i class="icon group-icon" :class="a.icon" />
+                <div>{{ a.label }}</div>
+              </nuxt-link>
+            </div>
+          </template>
+          <template v-if="legacyEnabled">
+            <div class="category">
+              {{ t('nav.categories.legacy') }}
+            </div>
+            <div v-if="currentProduct && isRancher" @click="hide()">
+              <a :href="(currentProduct.inStore === 'management' ? backToRancherGlobalLink : backToRancherLink)" class="option">
+                <i class="icon icon-cluster" />
+                {{ t('nav.backToRancher') }}
+              </a>
+            </div>
+            <div v-for="a in legacyApps" :key="a.label" @click="hide()">
               <nuxt-link class="option" :to="a.to">
                 <i class="icon group-icon" :class="a.icon" />
                 <div>{{ a.label }}</div>
@@ -247,8 +312,8 @@ export default {
           </div>
         </div>
         <div class="footer">
-          <div @click="hide()">
-            <nuxt-link :to="{name: 'support' }">
+          <div v-if="showSupportLink" @click="hide()">
+            <nuxt-link :to="showSupportLink">
               {{ t('nav.support') }}
             </nuxt-link>
           </div>
@@ -304,17 +369,27 @@ export default {
     z-index: 1000;
   }
 
-  .cluster.selector:not(.disabled):hover {
-    color: var(--primary-hover-text);
-    background: var(--primary-hover-bg);
-    border-radius: 5px;
-    text-decoration: none;
+  .cluster {
+    &.selector:not(.disabled):hover {
+      color: var(--primary-hover-text);
+      background: var(--primary-hover-bg);
+      border-radius: 5px;
+      text-decoration: none;
+
+      .rancher-provider-icon {
+        .rancher-icon-fill {
+          fill: var(--primary-hover-text);;
+        }
+      }
+    }
 
     .rancher-provider-icon {
       .rancher-icon-fill {
-        fill: var(--primary-hover-text);;
+        // Should match .option color
+        fill: var(--link);
       }
     }
+
   }
 
   .localeSelector {
@@ -336,14 +411,13 @@ export default {
 <style lang="scss" scoped>
   $clear-search-size: 20px;
   $icon-size: 24px;
-  $option-padding: 5px;
+  $option-padding: 4px;
   $option-height: $icon-size + $option-padding + $option-padding;
 
   .option {
     align-items: center;
     cursor: pointer;
     display: flex;
-    padding: $option-padding 0 $option-padding 10px;
     color: var(--link);
 
     &:hover {
@@ -363,7 +437,7 @@ export default {
     }
     svg {
       margin-right: 8px;
-      fill: var(--topmenu-text);
+      fill: var(--link);
     }
 
     > div {
@@ -384,6 +458,10 @@ export default {
         color: var(--primary-hover-text);
       }
     }
+  }
+
+  .option, .option-disabled {
+    padding: $option-padding 0 $option-padding 10px;
   }
 
   .menu {
@@ -463,18 +541,22 @@ export default {
         margin-top: 10px;
       }
 
+      .home {
+        color: var(--link);
+      }
+
       .home:focus {
         outline: 0;
       }
 
       .cluster {
-        padding: $option-padding 0 $option-padding 10px;
         align-items: center;
         display: flex;
+        height: $option-height;
         &:focus {
           outline: 0;
         }
-        .cluser-name {
+        .cluster-name {
           font-size: 16px;
         }
         > img {
@@ -486,22 +568,6 @@ export default {
 
       .pad {
         flex: 1;
-      }
-
-      .cluster-manager {
-        .btn {
-          border: 0;
-          line-height: 32px;
-          min-height: 32px;
-          height: 32px;
-          background-color: var(--header-btn-bg);
-          color: var(--header-btn-text);
-
-          &:hover {
-            color: var(--primary-hover-text);
-            background: var(--primary-hover-bg);
-          }
-        }
       }
 
       .search {
@@ -527,10 +593,6 @@ export default {
       .clusters {
         overflow-y: scroll;
         overflow-x: hidden;
-
-        &.fixed-height {
-          height: $option-height * 4;
-        }
       }
 
       .none-matching {

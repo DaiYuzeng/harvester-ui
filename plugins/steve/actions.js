@@ -420,6 +420,10 @@ export default {
     commit('action-menu/toggleEjectCDROM', resources, { root: true });
   },
 
+  promptModal({ commit, state }, data ) {
+    commit('action-menu/togglePromptModal', data, { root: true });
+  },
+
   async resourceAction({ getters, rootGetters, dispatch }, {
     resource, actionName, body, opt, showNotify = true
   }) {

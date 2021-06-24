@@ -65,10 +65,11 @@ export const CATEGORY = 'category';
 export const DEPRECATED = 'deprecated';
 export const HIDDEN = 'hidden';
 export const FROM_TOOLS = 'tools';
+export const FROM_CLUSTER = 'cluster';
 
 // Cluster provisioning
 export const PROVIDER = 'provider';
 export const CLOUD_CREDENTIAL = 'cloud';
 
-// NAMESPACE
+// NAMESPACE/PROJECT
 export const PROJECT_ID = 'projectId';

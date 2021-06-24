@@ -2,25 +2,27 @@ import { filterBy, isArray } from '@/utils/array';
 
 export const state = function() {
   return {
-    show:                  false,
-    tableSelected:         [],
-    tableAll:              [],
-    resources:             [],
-    elem:                  null,
-    event:                 null,
-    showPromptMove:        false,
-    showPromptRemove:      false,
-    showPromptRestore:     false,
-    showAssignTo:          false,
-    showEjectCDROM:        false,
-    showPromptUpdate:      false,
-    toMove:                [],
-    toRemove:              [],
-    toAssign:              [],
-    toRestore:             [],
-    toEject:               [],
-    toUpdate:              [],
-    toEnable:              null,
+    show:              false,
+    tableSelected:     [],
+    tableAll:          [],
+    resources:         [],
+    elem:              null,
+    event:             null,
+    showPromptMove:    false,
+    showPromptRemove:  false,
+    showPromptRestore: false,
+    showAssignTo:      false,
+    showEjectCDROM:    false,
+    showPromptUpdate:  false,
+    showModal:         false,
+    toMove:            [],
+    toRemove:          [],
+    toRestore:         [],
+    toAssign:          [],
+    toEject:           [],
+    toUpdate:          [],
+    toEnable:          null,
+    modalData:         {},
   };
 };
 
@@ -143,7 +145,18 @@ export const mutations = {
     }
 
     state.toUpdate = resources;
-  }
+  },
+
+  togglePromptModal(state, data) {
+    if (!data) {
+      // Clearing the resources also hides the prompt
+      state.showModal = false;
+    } else {
+      state.showModal = true;
+    }
+
+    state.modalData = data;
+  },
 };
 
 export const actions = {

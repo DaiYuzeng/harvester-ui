@@ -1,6 +1,6 @@
-import { MULTI_CLUSTER } from '@/store/features';
 import { AGE, NAME as NAME_COL, STATE } from '@/config/table-headers';
 import { CAPI } from '@/config/types';
+import { MULTI_CLUSTER } from '@/store/features';
 import { DSL } from '@/store/type-map';
 
 export const NAME = 'manager';
@@ -33,7 +33,7 @@ export function init(store) {
     group:      'Root',
     namespaced: false,
     icon:       'globe',
-    route:      { name: 'c-cluster-manager-pages-page', params: { cluser: 'local', page: 'rke-drivers' } },
+    route:      { name: 'c-cluster-manager-pages-page', params: { cluster: 'local', page: 'rke-drivers' } },
     exact:      true
   });
 
@@ -43,7 +43,7 @@ export function init(store) {
     group:      'Root',
     namespaced: false,
     icon:       'globe',
-    route:      { name: 'c-cluster-manager-pages-page', params: { cluser: 'local', page: 'rke-templates' } },
+    route:      { name: 'c-cluster-manager-pages-page', params: { cluster: 'local', page: 'rke-templates' } },
     exact:      true
   });
 
@@ -53,7 +53,7 @@ export function init(store) {
     group:      'Root',
     namespaced: false,
     icon:       'globe',
-    route:      { name: 'c-cluster-manager-pages-page', params: { cluser: 'local', page: 'cloud-credentials' } },
+    route:      { name: 'c-cluster-manager-pages-page', params: { cluster: 'local', page: 'cloud-credentials' } },
     exact:      true
   });
 
@@ -63,7 +63,7 @@ export function init(store) {
     group:      'Root',
     namespaced: false,
     icon:       'globe',
-    route:      { name: 'c-cluster-manager-pages-page', params: { cluser: 'local', page: 'node-templates' } },
+    route:      { name: 'c-cluster-manager-pages-page', params: { cluster: 'local', page: 'node-templates' } },
     exact:      true
   });
 
@@ -93,10 +93,22 @@ export function init(store) {
     'drivers',
   ]);
 
+  virtualType({
+    labelKey:       'legacy.psps',
+    name:           'pod-security-policies',
+    group:          'Root',
+    namespaced:     false,
+    weight:         0,
+    icon:           'folder',
+    route:          { name: 'c-cluster-manager-pages-page', params: { cluster: 'local', page: 'pod-security-policies' } },
+    exact:          true
+  });
+
   basicType([
     CAPI.MACHINE_DEPLOYMENT,
     CAPI.MACHINE_SET,
     CAPI.MACHINE,
+    'pod-security-policies'
   ], 'Advanced');
 
   const MACHINE_SUMMARY = {
@@ -123,8 +135,8 @@ export function init(store) {
     {
       name:   'provider',
       label:  'Provider',
-      value:  'nodeProvider',
-      sort:   ['nodeProvider', 'provisioner'],
+      value:  'machineProvider',
+      sort:   ['machineProvider', 'provisioner'],
     },
     MACHINE_SUMMARY,
     AGE,
@@ -136,7 +148,7 @@ export function init(store) {
     },
   ]);
 
-  headers('cluster.x-k8s.io.machinedeployment', [
+  headers(CAPI.MACHINE_DEPLOYMENT, [
     STATE,
     NAME_COL,
     MACHINE_SUMMARY,

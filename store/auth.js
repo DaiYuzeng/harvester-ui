@@ -18,8 +18,12 @@ export const BASE_SCOPES = {
 const KEY = 'rc_nonce';
 
 const ERR_NONCE = 'nonce';
-const ERR_CLIENT = 'client';
-const ERR_SERVER = 'server';
+
+export const LOGIN_ERRORS = {
+  CLIENT:              'client',
+  CLIENT_UNAUTHORIZED: 'client_unauthorized',
+  SERVER:              'server'
+};
 
 export const state = function() {
   return {

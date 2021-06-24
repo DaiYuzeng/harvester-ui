@@ -5,7 +5,7 @@ import CruResource from '@/components/CruResource';
 import SelectIconGrid from '@/components/SelectIconGrid';
 import EmberPage from '@/components/EmberPage';
 import ToggleSwitch from '@/components/form/ToggleSwitch';
-import { SUB_TYPE, _IMPORT } from '@/config/query-params';
+import { CHART, FROM_CLUSTER, SUB_TYPE, _IMPORT } from '@/config/query-params';
 import { DEFAULT_WORKSPACE } from '@/models/provisioning.cattle.io.cluster';
 import { mapGetters } from 'vuex';
 import { sortBy } from '@/utils/sort';
@@ -13,7 +13,7 @@ import { set } from '@/utils/object';
 import { mapPref, PROVISIONER, _RKE1, _RKE2 } from '@/store/prefs';
 import { filterAndArrangeCharts } from '@/store/catalog';
 import { CATALOG } from '@/config/labels-annotations';
-import { MANAGEMENT } from '@/config/types';
+import { CAPI, MANAGEMENT } from '@/config/types';
 import { mapFeature, RKE2 as RKE2_FEATURE } from '@/store/features';
 import { allHash } from '@/utils/promise';
 import Rke2Config from './rke2';
@@ -30,20 +30,17 @@ const SORT_GROUPS = {
   custom2:   5,
 };
 
-// Map some provider IDs to icon names where they don't directly match
-const ICON_MAPPINGS = { linode: 'linodelke' };
-
 export default {
   name: 'CruCluster',
 
   components: {
-    Loading,
     CruResource,
-    SelectIconGrid,
-    Rke2Config,
-    Import,
     EmberPage,
-    ToggleSwitch,
+    Import,
+    Loading,
+    Rke2Config,
+    SelectIconGrid,
+    ToggleSwitch
   },
 
   mixins: [CreateEditView],
@@ -69,13 +66,14 @@ export default {
     const hash = {
       nodeDrivers:      this.$store.dispatch('management/findAll', { type: MANAGEMENT.NODE_DRIVER }),
       kontainerDrivers: this.$store.dispatch('management/findAll', { type: MANAGEMENT.KONTANIER_DRIVER }),
+      catalog:          this.$store.dispatch('catalog/load'),
     };
 
     if ( this.value.id && !this.value.isRke2 ) {
       // These are needed to resolve references in the mgmt cluster -> node pool -> node template to figure out what provider the cluster is using
       // so that the edit iframe for ember pages can go to the right place.
-      hash.nodePools = this.$store.dispatch('management/findAll', { type: MANAGEMENT.NODE_POOL });
-      hash.nodeTemplates = this.$store.dispatch('management/findAll', { type: MANAGEMENT.NODE_TEMPLATE });
+      hash.rke1NodePools = this.$store.dispatch('management/findAll', { type: MANAGEMENT.NODE_POOL });
+      hash.rke1NodeTemplates = this.$store.dispatch('management/findAll', { type: MANAGEMENT.NODE_TEMPLATE });
     }
 
     const res = await allHash(hash);
@@ -97,14 +95,12 @@ export default {
     } else if ( this.value.isCustom ) {
       // Edit exiting custom
       this.selectType('custom', false);
-    } else if ( this.value.isRke2 && this.value.nodeProvider ) {
+    } else if ( this.value.isRke2 && this.value.machineProvider ) {
       // Edit exiting RKE2
-      await this.selectType(this.value.nodeProvider, false);
+      await this.selectType(this.value.machineProvider, false);
     } else if ( this.value.mgmt?.emberEditPath ) {
       // Iframe an old page
       this.emberLink = this.value.mgmt.emberEditPath;
-    } else {
-      await this.$store.dispatch('catalog/load');
     }
 
     if ( !this.value.id ) {
@@ -118,12 +114,14 @@ export default {
 
   data() {
     const subType = this.$route.query[SUB_TYPE] || null;
+    const chart = this.$route.query[CHART] || null;
     const isImport = this.realMode === _IMPORT;
 
     return {
       nodeDrivers:      [],
-      kontainerDrivers:     [],
+      kontainerDrivers: [],
       subType,
+      chart,
       isImport,
       providerCluster:  null,
       emberLink:        null,
@@ -165,7 +163,9 @@ export default {
     },
 
     templateOptions() {
-      return filterAndArrangeCharts(this.allCharts, { showTypes: CATALOG._CLUSTER_TPL }).map(x => x.id);
+      const out = filterAndArrangeCharts(this.allCharts, { showTypes: CATALOG._CLUSTER_TPL });
+
+      return out;
     },
 
     subTypes() {
@@ -175,9 +175,8 @@ export default {
       const out = [];
 
       const templates = this.templateOptions;
-      const vueMachineTypes = getters['plugins/machineDrivers'];
       const vueKontainerTypes = getters['plugins/clusterDrivers'];
-      const machineTypes = this.nodeDrivers.filter(x => x.spec.active).map(x => x.id);
+      const machineTypes = this.nodeDrivers.filter(x => x.spec.active && x.state === 'active').map(x => x.spec.displayName || x.id);
 
       this.kontainerDrivers.filter(x => (isImport ? x.showImport : x.showCreate)).forEach((obj) => {
         if ( vueKontainerTypes.includes(obj.driverName) ) {
@@ -190,8 +189,14 @@ export default {
       if ( isImport ) {
         addType('import', 'custom', false);
       } else {
-        templates.forEach((id) => {
-          addType(id, 'template', true);
+        templates.forEach((chart) => {
+          out.push({
+            id:          `chart:${ chart.id }`,
+            label:       chart.chartNameDisplay,
+            description: chart.chartDescription,
+            icon:        chart.icon || require('~/assets/images/generic-catalog.svg'),
+            group:       'template',
+          });
         });
 
         if (this.isRke1 ) {
@@ -202,7 +207,7 @@ export default {
           addType('custom', 'custom1', false, '/g/clusters/add/launch/custom');
         } else {
           machineTypes.forEach((id) => {
-            addType(id, 'rke2', !vueMachineTypes.includes(id));
+            addType(id, 'rke2', false);
           });
 
           addType('custom', 'custom2', false);
@@ -216,13 +221,9 @@ export default {
         const description = getters['i18n/withFallback'](`cluster.providerDescription."${ id }"`, null, '');
         let icon = require('~/assets/images/generic-driver.svg');
 
-        const iconID = ICON_MAPPINGS[id] || id;
-
-        if ( group !== 'template' ) {
-          try {
-            icon = require(`~/assets/images/providers/${ iconID }.svg`);
-          } catch (e) {}
-        }
+        try {
+          icon = require(`~/assets/images/providers/${ id }.svg`);
+        } catch (e) {}
 
         const subtype = {
           id,
@@ -259,17 +260,42 @@ export default {
         entry.types.push(row);
       }
 
+      for ( const k in out ) {
+        out[k].types = sortBy(out[k].types, 'label');
+      }
+
       return sortBy(Object.values(out), 'sort');
     },
   },
 
   methods: {
+    cancel() {
+      this.$router.push({
+        name:   'c-cluster-product-resource',
+        params: {
+          cluster:  this.$route.params.cluster,
+          product:  this.$store.getters['productId'],
+          resource: CAPI.RANCHER_CLUSTER,
+        },
+      });
+    },
+
     colorFor(obj) {
       return `color${ SORT_GROUPS[obj.group] || 1 }`;
     },
 
     clickedType(obj) {
       const id = obj.id;
+      const parts = id.split(':', 2);
+
+      if ( parts[0] === 'chart' ) {
+        const chart = this.$store.getters['catalog/chart']({ key: parts[1] });
+        const localCluster = this.$store.getters['management/all'](MANAGEMENT.CLUSTER).find(x => x.isLocal);
+
+        chart.goToInstall(FROM_CLUSTER, localCluster.id);
+
+        return;
+      }
 
       this.emberLink = obj.link;
       this.$router.applyQuery({ [SUB_TYPE]: id });
@@ -277,8 +303,15 @@ export default {
     },
 
     selectType(type, fetch = true) {
-      this.subType = type;
-      this.$emit('set-subtype', this.$store.getters['i18n/withFallback'](`cluster.provider."${ type }"`, null, type));
+      const parts = type.split(':', 2);
+
+      if ( parts[0] === 'chart' ) {
+        this.subType = 'chart';
+        this.$emit('set-subtype', this.$store.getters['i18n/withFallback'](`cluster.provider.chart`));
+      } else {
+        this.subType = type;
+        this.$emit('set-subtype', this.$store.getters['i18n/withFallback'](`cluster.provider."${ type }"`, null, type));
+      }
 
       if ( fetch ) {
         this.$fetch();
@@ -301,7 +334,9 @@ export default {
     :resource="value"
     :errors="errors"
     :subtypes="subTypes"
+    :cancel-event="true"
     @finish="save"
+    @cancel="cancel"
     @select-type="selectType"
     @error="e=>errors = e"
   >
@@ -357,13 +392,5 @@ export default {
     margin-top: -10px;
     position: absolute;
     right: 0;
-  }
-
-  .embed {
-    position: absolute;
-    top: var(--header-height);
-    height: calc(100vh - var(--header-height));
-    left: var(--nav-width);
-    width: calc(100vw - var(--nav-width));
   }
 </style>

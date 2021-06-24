@@ -1,6 +1,7 @@
 <script>
 import jsyaml from 'js-yaml';
 import merge from 'lodash/merge';
+import isEqual from 'lodash/isEqual';
 import { mapPref, DIFF } from '@/store/prefs';
 
 import Banner from '@/components/Banner';
@@ -17,18 +18,20 @@ import Tabbed from '@/components/Tabbed';
 import UnitInput from '@/components/form/UnitInput';
 import YamlEditor, { EDITOR_MODES } from '@/components/YamlEditor';
 import Wizard from '@/components/Wizard';
-
+import ChartMixin from '@/mixins/chart';
+import ChildHook, { BEFORE_SAVE_HOOKS, AFTER_SAVE_HOOKS } from '@/mixins/child-hook';
 import { CATALOG, MANAGEMENT } from '@/config/types';
 import {
-  CHART, FROM_TOOLS, NAMESPACE, REPO, REPO_TYPE, VERSION, _FLAGGED
+  CHART, FROM_CLUSTER, FROM_TOOLS, NAMESPACE, REPO, REPO_TYPE, VERSION, _FLAGGED
 } from '@/config/query-params';
 import { CATALOG as CATALOG_ANNOTATIONS, DESCRIPTION as DESCRIPTION_ANNOTATION, PROJECT } from '@/config/labels-annotations';
+
 import { exceptionToErrorsArray } from '@/utils/error';
 import { clone, diff, get, set } from '@/utils/object';
 import { findBy, insertAt } from '@/utils/array';
-import ChildHook, { BEFORE_SAVE_HOOKS, AFTER_SAVE_HOOKS } from '@/mixins/child-hook';
-import ChartMixin from '@/pages/c/_cluster/apps/chart_mixin';
-import isEqual from 'lodash/isEqual';
+import Vue from 'vue';
+import { saferDump } from '@/utils/create-yaml';
+import { DEFAULT_WORKSPACE } from '@/models/provisioning.cattle.io.cluster';
 
 const VALUES_STATE = {
   FORM: 'FORM',
@@ -62,7 +65,7 @@ export default {
   ],
 
   async fetch() {
-    await this.baseFetch();
+    await this.fetchChart();
 
     this.errors = [];
 
@@ -76,26 +79,28 @@ export default {
       id:   'server-url'
     });
 
-    this.value = await this.$store.dispatch('cluster/create', {
-      type:     'chartInstallAction',
-      metadata: {
-        namespace: this.existing ? this.existing.spec.namespace : this.query.appNamespace,
-        name:      this.existing ? this.existing.spec.name : this.query.appName,
-      }
-    });
-
     if ( this.existing ) {
       this.forceNamespace = this.existing.metadata.namespace;
       this.nameDisabled = true;
+    } else if (this.$route.query[FROM_CLUSTER] === _FLAGGED) {
+      this.forceNamespace = DEFAULT_WORKSPACE;
+    } else if ( this.chart?.targetNamespace ) {
+      this.forceNamespace = this.chart.targetNamespace;
+    } else if ( this.query.appNamespace ) {
+      this.forceNamespace = this.query.appNamespace;
     } else {
-      if ( this.chart?.targetNamespace ) {
-        this.forceNamespace = this.chart.targetNamespace;
-      } else if ( this.query.appNamespace ) {
-        this.forceNamespace = this.query.appNamespace;
-      } else {
-        this.forceNamespace = null;
-      }
+      this.forceNamespace = null;
+    }
 
+    this.value = await this.$store.dispatch('cluster/create', {
+      type:     'chartInstallAction',
+      metadata: {
+        namespace: this.forceNamespace || this.$store.getters['defaultNamespace'],
+        name:      this.existing?.spec?.name || this.query.appName || '',
+      }
+    });
+
+    if ( !this.existing) {
       if ( this.chart?.targetName ) {
         this.value.metadata.name = this.chart.targetName;
         this.nameDisabled = true;
@@ -131,6 +136,8 @@ export default {
       await this.loadValuesComponent();
     }
 
+    await this.loadChartSteps();
+
     if ( !this.loadedVersion || this.loadedVersion !== this.version.key ) {
       let userValues;
 
@@ -154,11 +161,7 @@ export default {
 
       this.removeGlobalValuesFrom(userValues);
       this.chartValues = merge(merge({}, this.versionInfo?.values || {}), userValues);
-      this.valuesYaml = jsyaml.safeDump(this.chartValues || {});
-
-      if ( this.valuesYaml === '{}\n' ) {
-        this.valuesYaml = '';
-      }
+      this.valuesYaml = saferDump(this.chartValues);
 
       // For YAML diff
       if ( !this.loadedVersion ) {
@@ -172,6 +175,8 @@ export default {
     this.updateStepOneReady();
 
     this.preFormYamlOption = this.valuesComponent || this.hasQuestions ? VALUES_STATE.FORM : VALUES_STATE.YAML;
+
+    this.reademeWindowName = `${ this.stepperName }-${ this.version?.version }`;
   },
 
   data() {
@@ -203,6 +208,7 @@ export default {
       valuesComponent:        null,
       valuesYaml:             '',
       project:                null,
+      reademeWindowName:      null,
 
       defaultCmdOpts,
       customCmdOpts: { ...defaultCmdOpts },
@@ -216,7 +222,7 @@ export default {
       showQuestions:       true,
       showSlideIn:         false,
       componentHasTabs:    false,
-      showCommandStep:        false,
+      showCommandStep:     false,
       isNamespaceNew:      false,
 
       stepBasic: {
@@ -224,19 +230,26 @@ export default {
         label:       this.t('catalog.install.steps.basics.label'),
         subtext:     this.t('catalog.install.steps.basics.subtext'),
         ready:       true,
+        weight:  30
       },
       stepValues: {
         name:        'helmValues',
         label:       this.t('catalog.install.steps.helmValues.label'),
         subtext:     this.t('catalog.install.steps.helmValues.subtext'),
         ready:       true,
+        weight:  20
       },
       stepCommands: {
         name:        'helmCli',
         label:       this.t('catalog.install.steps.helmCli.label'),
         subtext:     this.t('catalog.install.steps.helmCli.subtext'),
         ready:       true,
-      }
+        weight:  10
+      },
+
+      customSteps: [
+
+      ]
     };
   },
 
@@ -313,6 +326,11 @@ export default {
       return out;
     },
 
+    showSelectVersionOrChart() {
+      // Allow the user to choose a version if the app exists OR they've come from tools
+      return this.existing || (FROM_TOOLS in this.$route.query);
+    },
+
     showNameEditor() {
       return !this.nameDisabled || !this.forceNamespace;
     },
@@ -337,10 +355,6 @@ export default {
       }
 
       return EDITOR_MODES.EDIT_CODE;
-    },
-
-    hasQuestions() {
-      return this.versionInfo && !!this.versionInfo.questions;
     },
 
     showingYaml() {
@@ -380,15 +394,11 @@ export default {
     },
 
     stepperName() {
-      return this.existing?.nameDisplay || this.chart?.chartDisplayName;
+      return this.existing?.nameDisplay || this.chart?.chartNameDisplay;
     },
 
     stepperSubtext() {
       return this.existing && this.currentVersion !== this.targetVersion ? `${ this.currentVersion } > ${ this.targetVersion }` : this.targetVersion;
-    },
-
-    reademeWindowName() {
-      return `${ this.stepperName }-${ this.version.version }`;
     },
 
     showingReadmeWindow() {
@@ -410,18 +420,33 @@ export default {
     },
 
     steps() {
-      const steps = [this.stepBasic];
+      let steps;
 
-      steps.push(this.stepValues);
+      const type = this.version?.annotations?.[CATALOG_ANNOTATIONS.TYPE];
+
+      if ( type === CATALOG_ANNOTATIONS._CLUSTER_TPL ) {
+        steps = [this.stepValues];
+      } else {
+        steps = [
+          this.stepBasic,
+          this.stepValues,
+          ...this.customSteps
+        ];
+      }
+
       if (this.showCommandStep) {
         steps.push(this.stepCommands);
       }
 
-      return steps;
+      return steps.sort((a, b) => (b.weight || 0) - (a.weight || 0));
     },
 
     cmdOptions() {
       return this.showCommandStep ? this.customCmdOpts : this.defaultCmdOpts;
+    },
+
+    namespaceNewAllowed() {
+      return !this.existing && !this.forceNamespace;
     }
   },
 
@@ -503,6 +528,8 @@ export default {
   async mounted() {
     await this.loadValuesComponent();
 
+    await this.loadChartSteps();
+
     window.scrollTop = 0;
 
     // For easy access debugging...
@@ -543,6 +570,32 @@ export default {
       }
     },
 
+    async loadChartSteps() {
+      const component = this.version?.annotations?.[CATALOG_ANNOTATIONS.COMPONENT] || this.version?.annotations?.[CATALOG_ANNOTATIONS.RELEASE_NAME];
+
+      if ( component ) {
+        const steps = await this.$store.getters['catalog/chartSteps'](component);
+
+        this.customSteps = await Promise.all( steps.map(cs => this.loadChartStep(cs)));
+      }
+    },
+
+    async loadChartStep(customStep) {
+      const loaded = await customStep.component();
+      const withFallBack = this.$store.getters['i18n/withFallback'];
+
+      return {
+        name:        customStep.name,
+        label:       withFallBack(loaded?.default?.label, null, customStep.name),
+        subtext:     withFallBack(loaded?.default?.subtext, null, ''),
+        weight:      loaded?.default?.weight,
+        ready:       false,
+        hidden:      true,
+        loading:    true,
+        component: customStep.component,
+      };
+    },
+
     selectChart(chart) {
       if ( !chart ) {
         return;
@@ -561,6 +614,8 @@ export default {
         this.done();
       } else if (this.$route.query[FROM_TOOLS] === _FLAGGED) {
         this.$router.replace(this.clusterToolsLocation());
+      } else if (this.$route.query[FROM_CLUSTER] === _FLAGGED) {
+        this.$router.replace(this.clustersLocation());
       } else {
         this.$router.replace(this.chartLocation(false));
       }
@@ -569,6 +624,8 @@ export default {
     done() {
       if ( this.$route.query[FROM_TOOLS] === _FLAGGED ) {
         this.$router.replace(this.clusterToolsLocation());
+      } else if (this.$route.query[FROM_CLUSTER] === _FLAGGED) {
+        this.$router.replace(this.clustersLocation());
       } else {
         // If the create app process fails helm validation then we still get here... so until this is fixed new apps will be taken to the
         // generic apps list (existing apps will be taken to their detail page)
@@ -684,7 +741,7 @@ export default {
         }
       }
 
-      if ( values.global?.cattle.windows && !Object.keys(values.global.cattle.windows).length ) {
+      if ( values.global?.cattle?.windows && !Object.keys(values.global.cattle.windows).length ) {
         delete values.global.cattle.windows;
       }
 
@@ -836,7 +893,7 @@ export default {
     },
 
     getOptionLabel(opt) {
-      return opt?.chartDisplayName;
+      return opt?.chartNameDisplay;
     },
 
     showReadmeWindow() {
@@ -847,6 +904,16 @@ export default {
         component: 'ChartReadme',
         attrs:     { versionInfo: this.versionInfo }
       }, { root: true });
+    },
+
+    updateStep(stepName, update) {
+      const step = this.steps.find(step => step.name === stepName);
+
+      if (step) {
+        for (const prop in update) {
+          Vue.set(step, prop, update[prop]);
+        }
+      }
     }
   },
 };
@@ -867,6 +934,14 @@ export default {
       @cancel="cancel"
       @finish="finish"
     >
+      <template v-for="customStep of customSteps" v-slot:[customStep.name]>
+        <component
+          :is="customStep.component"
+          :key="customStep.name"
+          @update="updateStep(customStep.name, $event)"
+          @errors="e=>errors.push(...e)"
+        />
+      </template>
       <template #bannerTitleImage>
         <div class="logo-bg">
           <LazyImage :src="chart ? chart.icon : ''" class="logo" />
@@ -874,10 +949,13 @@ export default {
       </template>
       <template #basics>
         <div class="step__basic">
-          <p v-if="step1Description" class="row mb-10">
-            {{ step1Description }}
-          </p>
-          <div v-if="requires.length || warnings.length" class="mb-30">
+          <Banner v-if="step1Description" color="info" class="description">
+            <span>{{ step1Description }}</span>
+            <span v-if="namespaceNewAllowed" class="mt-10">
+              {{ t('catalog.install.steps.basics.nsCreationDescription', {}, true) }}
+            </span>
+          </Banner>
+          <div v-if="requires.length || warnings.length" class="mb-15">
             <Banner v-for="msg in requires" :key="msg" color="error">
               <span v-html="msg" />
             </Banner>
@@ -886,9 +964,9 @@ export default {
               <span v-html="msg" />
             </Banner>
           </div>
-          <div v-if="existing" class="row mb-10">
-            <div class="col span-6">
-              <!-- We have a chart, select a new version -->
+          <div v-if="showSelectVersionOrChart" class="row mb-20">
+            <div class="col span-4">
+              <!-- We have a chart for the app, let the user select a new version -->
               <LabeledSelect
                 v-if="chart"
                 :label="t('catalog.install.version')"
@@ -897,7 +975,7 @@ export default {
                 :selectable="version => !version.disabled"
                 @input="selectVersion"
               />
-              <!-- There is no chart, let the user try to select one -->
+              <!-- Can't find the chart for the app, let the user try to select one -->
               <LabeledSelect
                 v-else
                 :label="t('catalog.install.chart')"
@@ -928,9 +1006,10 @@ export default {
             :name-required="false"
             :name-ns-hidden="!showNameEditor"
             :force-namespace="forceNamespace"
-            :namespace-new-allowed="!existing && !forceNamespace"
+            :namespace-new-allowed="namespaceNewAllowed"
             :extra-columns="showProject ? ['project'] : []"
             :show-spacer="false"
+            :horizontal="false"
             @isNamespaceNew="isNamespaceNew = $event"
           >
             <template v-if="showProject" #project>
@@ -946,20 +1025,19 @@ export default {
               />
             </template>
           </NameNsDescription>
-          <div class="mt-10 mb-40">
-            {{ isNamespaceNew ? t('catalog.install.steps.basics.createNamespace') : '&nbsp;' }}
-          </div>
           <div class="step__values__controls--spacer" style="flex:1">
 &nbsp;
           </div>
+          <Banner v-if="isNamespaceNew" color="info" v-html="t('catalog.install.steps.basics.createNamespace', {namespace: value.metadata.namespace}, true) ">
+          </Banner>
 
-          <Checkbox v-model="showCommandStep" :label="t('catalog.install.steps.helmCli.checkbox', { action, existing: !!existing })" />
+          <Checkbox v-model="showCommandStep" class="mb-20" :label="t('catalog.install.steps.helmCli.checkbox', { action, existing: !!existing })" />
         </div>
       </template>
       <template #helmValues>
-        <p v-if="step2Description" class="row mb-10">
+        <Banner v-if="step2Description" color="info" class="description">
           {{ step2Description }}
-        </p>
+        </Banner>
         <div class="step__values__controls">
           <ButtonGroup
             v-model="preFormYamlOption"
@@ -1039,9 +1117,8 @@ export default {
               <Questions
                 v-model="chartValues"
                 :mode="mode"
-                :chart="chart"
-                :version="version"
-                :version-info="versionInfo"
+                :source="versionInfo"
+                tabbed="multiple"
                 :target-namespace="targetNamespace"
               />
             </Tabbed>
@@ -1064,9 +1141,9 @@ export default {
         <ResourceCancelModal ref="cancelModal" :is-cancel-modal="false" :is-form="true" @cancel-cancel="preFormYamlOption=formYamlOption" @confirm-cancel="formYamlOption = preFormYamlOption;"></ResourceCancelModal>
       </template>
       <template #helmCli>
-        <p v-if="step3Description" class="row mb-10">
+        <Banner v-if="step3Description" color="info" class="description">
           {{ step3Description }}
-        </p>
+        </Banner>
         <div><Checkbox v-if="existing" v-model="customCmdOpts.cleanupOnFail" :label="t('catalog.install.helm.cleanupOnFail')" /></div>
         <div><Checkbox v-if="!existing" v-model="customCmdOpts.crds" :label="t('catalog.install.helm.crds')" /></div>
         <div><Checkbox v-model="customCmdOpts.hooks" :label="t('catalog.install.helm.hooks')" /></div>
@@ -1111,9 +1188,17 @@ export default {
 <style lang="scss" scoped>
   $title-height: 50px;
   $padding: 5px;
+  $slideout-width: 35%;
 
   .install-steps {
-    position: relative; overflow: hidden;
+    position: relative;
+    overflow: hidden;
+
+    .description {
+      display: flex;
+      flex-direction: column;
+      margin-top: 0;
+    }
   }
 
   .wizard {
@@ -1142,6 +1227,10 @@ export default {
 
   .step {
     &__basic {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+
       .spacer {
         line-height: 2;
       }
@@ -1173,13 +1262,15 @@ export default {
   }
 
   .slideIn {
+    $slideout-width: 35%;
+
     border-left: var(--header-border-size) solid var(--header-border);
     position: absolute;
     top: 0;
-    right: -700px;
+    right: -$slideout-width;
     height: 100%;
     background-color: var(--topmenu-bg);
-    max-width: 35%;
+    width: $slideout-width;
     z-index: 10;
     display: flex;
     flex-direction: column;

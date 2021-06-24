@@ -85,6 +85,15 @@ export const PERSISTENT_VOLUME_SOURCE = {
   sort:     ['provisioner'],
 };
 
+export const PERSISTENT_VOLUME_CLAIM = {
+  name:          'persistent-volume-claim',
+  labelKey:      'tableHeaders.persistentVolumeClaim',
+  sort:          ['nameSort'],
+  value:         'claimName',
+  formatter:     'LinkDetail',
+  formatterOpts: { reference: 'claim.detailLocation' },
+};
+
 export const OUTPUT = {
   name:          'localOutputRefs',
   labelKey:      'tableHeaders.output',
@@ -175,6 +184,14 @@ export const RAM = {
   value:     'ramUsagePercentage',
   formatter: 'PercentageBar',
   width:     120,
+};
+
+export const PRINCIPAL = {
+  name:      'principal',
+  labelKey:  'tableHeaders.name',
+  sort:      'principal.loginName',
+  value:     'userPrincipalName',
+  formatter: 'Principal',
 };
 
 export const PODS = {
@@ -520,7 +537,6 @@ export const SPEC_TYPE = {
   value:     `$['spec']['type']`,
   sort:      `$['spec']['type']`,
   formatter: 'ServiceType',
-  width:     100,
 };
 
 export const TARGET_PORT = {
@@ -824,6 +840,12 @@ export const RESTART = {
   sort:      ['restartRequired', 'nameSort'],
   formatter: 'Checked',
   width:     75,
+};
+
+export const ROLE = {
+  name:          'role',
+  value:         'roleDisplay',
+  labelKey:      'tableHeaders.role',
 };
 
 export const FEATURE_DESCRIPTION = {

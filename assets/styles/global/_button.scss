@@ -77,12 +77,17 @@ button,
 .role-secondary {
   background: transparent;
   color: var(--primary) !important;
-  border: solid thin var(--primary);
+  border: solid 1px var(--primary);
+  line-height: $btn-height - 2px;
+
+  &.btn-sm {
+    line-height: $btn-sm-height;
+  }
 }
 
 .role-tertiary {
   background: var(--accent-btn);
-  border: solid thin var(--primary);
+  border: solid 1px var(--primary);
   color: var(--primary);
 }
 
@@ -110,7 +115,6 @@ fieldset[disabled] .btn {
   cursor: not-allowed;
   color: var(--disabled-text) !important;
   &:not(.role-link){
-    border: solid thin var(--input-disabled-border);
     background-color: var(--disabled-bg) !important;
   }
 }

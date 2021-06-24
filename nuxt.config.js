@@ -5,6 +5,7 @@ import { STANDARD } from './config/private-label';
 import { directiveSsr as t } from './plugins/i18n';
 import { trimWhitespaceSsr as trimWhitespace } from './plugins/trim-whitespace';
 
+require('events').EventEmitter.defaultMaxListeners = 20;
 require('dotenv').config();
 
 const version = process.env.VERSION ||
@@ -313,6 +314,7 @@ module.exports = {
     { src: '~/plugins/lookup', ssr: false },
     { src: '~/plugins/nuxt-client-init', ssr: false },
     '~/plugins/replaceall',
+    '~/plugins/back-button',
   ],
 
   // Proxy: https://github.com/nuxt-community/proxy-module#options
@@ -328,8 +330,10 @@ module.exports = {
     '/v1-*':         proxyOpts(api), // SAML, KDM, etc
     // These are for Ember embedding
     '/c/*/edit':     proxyOpts('https://127.0.0.1:8000'), // Can't proxy all of /c because that's used by Vue too
+    '/k/':           proxyOpts('https://127.0.0.1:8000'),
     '/g':            proxyOpts('https://127.0.0.1:8000'),
     '/n':            proxyOpts('https://127.0.0.1:8000'),
+    '/p':            proxyOpts('https://127.0.0.1:8000'),
     '/assets':       proxyOpts('https://127.0.0.1:8000'),
     '/translations': proxyOpts('https://127.0.0.1:8000'),
     '/engines-dist': proxyOpts('https://127.0.0.1:8000'),

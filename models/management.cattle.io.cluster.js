@@ -1,5 +1,5 @@
 import { CATALOG } from '@/config/labels-annotations';
-import { FLEET, MANAGEMENT } from '@/config/types';
+import { FLEET, MANAGEMENT, NODE } from '@/config/types';
 import { insertAt } from '@/utils/array';
 import { downloadFile } from '@/utils/download';
 import { parseSi } from '@/utils/units';
@@ -21,8 +21,8 @@ export default {
         content: this.provisionerDisplay
       },
       {
-        label:   'Node Provider',
-        content: this.nodeProviderDisplay
+        label:   'Machine Provider',
+        content: this.machineProviderDisplay
       },
       {
         label:   'Kubernetes Version',
@@ -59,7 +59,7 @@ export default {
     return this.hasLink('remove') && !this?.spec?.internal;
   },
 
-  nodePools() {
+  machinePools() {
     const pools = this.$getters['all'](MANAGEMENT.NODE_POOL);
 
     return pools.filter(x => x.spec?.clusterName === this.id);
@@ -74,8 +74,8 @@ export default {
     }
   },
 
-  nodeProvider() {
-    const kind = this.nodePools?.[0]?.provider;
+  machineProvider() {
+    const kind = this.machinePools?.[0]?.provider;
 
     if ( kind ) {
       return kind.replace(/config$/i, '').toLowerCase();
@@ -92,13 +92,15 @@ export default {
     const provisioner = KONTAINER_TO_DRIVER[(this.provisioner || '').toLowerCase()] || this.provisioner;
 
     if ( provisioner === 'rancherKubernetesEngine' ) {
-      if ( this.nodePools?.[0] ) {
-        provider = this.nodePools[0]?.nodeTemplate?.spec?.driver || null;
+      if ( this.machinePools?.[0] ) {
+        provider = this.machinePools[0]?.nodeTemplate?.spec?.driver || null;
       } else {
         provider = 'custom';
       }
-    } else if ( this.driver && this.provisioner ) {
+    } else if ( this.driver ) {
       provider = this.driver;
+    } else if ( provisioner && provisioner.endsWith('v2') ) {
+      provider = provisioner;
     } else {
       provider = 'import';
     }
@@ -193,7 +195,7 @@ export default {
   },
 
   scope() {
-    return this.id === 'local' ? CATALOG._MANAGEMENT : CATALOG._DOWNSTREAM;
+    return this.isLocal ? CATALOG._MANAGEMENT : CATALOG._DOWNSTREAM;
   },
 
   setClusterNameLabel() {
@@ -295,4 +297,35 @@ export default {
       downloadFile('kubeconfig.yaml', out, 'application/yaml');
     };
   },
+
+  fetchNodeMetrics() {
+    return async() => {
+      const nodes = await this.$dispatch('cluster/findAll', { type: NODE }, { root: true });
+      const nodeMetrics = await this.$dispatch('cluster/findAll', { type: NODE }, { root: true });
+
+      const someNonWorkerRoles = nodes.some(node => node.hasARole && !node.isWorker);
+
+      const metrics = nodeMetrics.filter((metric) => {
+        const node = nodes.find(nd => nd.id === metric.id);
+
+        return node && (!someNonWorkerRoles || node.isWorker);
+      });
+      const initialAggregation = {
+        cpu:    0,
+        memory: 0
+      };
+
+      if (isEmpty(metrics)) {
+        return null;
+      }
+
+      return metrics.reduce((agg, metric) => {
+        agg.cpu += parseSi(metric?.usage?.cpu);
+        agg.memory += parseSi(metric?.usage?.memory);
+
+        return agg;
+      }, initialAggregation);
+    };
+  },
+
 };

@@ -246,7 +246,7 @@ BODY, .theme-light {
   --warning-light-bg           : #{rgba($warning, 0.05)};
 
   .text-warning {
-    color: var(--warning) !important;
+    color: var(--error) !important;
   }
 
   .bg-warning {
@@ -305,8 +305,8 @@ BODY, .theme-light {
   --scrollbar-track            : transparent;
 
   --header-bg                  : #{$lightest};
-  --header-btn-bg              : #{$light};
-  --header-btn-text            : #{$darker};
+  --header-btn-bg              : transparent;
+  --header-btn-text            : #{$darkest};
   --header-input-text          : #{$lightest};
   --header-height              : 55px;
   --header-border              : #{$medium};
@@ -367,7 +367,7 @@ BODY, .theme-light {
   --card-header                : var(--primary-banner-bg);
 
   --input-text                 : #{$darkest};
-  --input-label                : var(--secondary);
+  --input-label                : #{$secondary};
   --input-placeholder          : #{darken($disabled, 10%)};
   --input-border               : var(--border);
   --input-bg                   : var(--body-bg);

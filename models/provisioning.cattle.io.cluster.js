@@ -14,8 +14,8 @@ export default {
         content: this.provisionerDisplay
       },
       {
-        label:   'Node Provider',
-        content: this.nodeProviderDisplay
+        label:   'Machine Provider',
+        content: this.machineProviderDisplay
       },
       {
         label:   'Kubernetes Version',
@@ -45,6 +45,48 @@ export default {
       enabled:    this.$rootGetters['isRancher'],
     });
 
+    const canSaveAsTemplate = this.isRke1 && this.mgmt.status.driver === 'rancherKubernetesEngine' && !this.mgmt.spec.clusterTemplateName && this.hasLink('update');
+    const canRotateEncryptionKey = this.isRke1 && this.mgmt?.hasAction('rotateEncryptionKey');
+    const canRotateCertificates = this.mgmt?.hasAction('rotateCertificates');
+
+    if (canSaveAsTemplate || canRotateEncryptionKey || canRotateCertificates) {
+      insertAt(out, 2, { divider: true });
+
+      let insertIndex = 3;
+
+      if (canSaveAsTemplate) {
+        insertAt(out, insertIndex, {
+          action:     'saveAsRKETemplate',
+          label:      'Save as RKE Template',
+          icon:       'icon icon-folder',
+          bulkable:   false,
+          enabled:    this.$rootGetters['isRancher'],
+        });
+        insertIndex++;
+      }
+
+      if (canRotateCertificates) {
+        insertAt(out, insertIndex, {
+          action:     'rotateCertificates',
+          label:      'Rotate Certificates',
+          icon:       'icon icon-backup',
+          bulkable:   false,
+          enabled:    this.$rootGetters['isRancher'],
+        });
+        insertIndex++;
+      }
+
+      if (canRotateEncryptionKey) {
+        insertAt(out, insertIndex, {
+          action:     'rotateEncryptionKey',
+          label:      'Rotate Encryption Keys',
+          icon:       'icon icon-refresh',
+          bulkable:   false,
+          enabled:    this.$rootGetters['isRancher'],
+        });
+      }
+    }
+
     return out;
   },
 
@@ -53,7 +95,7 @@ export default {
   },
 
   isCustom() {
-    return this.isRke2 && !(this.spec?.rkeConfig?.nodePools?.length);
+    return this.isRke2 && !(this.spec?.rkeConfig?.machinePools?.length);
   },
 
   isRke2() {
@@ -74,6 +116,16 @@ export default {
     const out = this.$getters['byId'](MANAGEMENT.CLUSTER, name);
 
     return out;
+  },
+
+  waitForMgmt() {
+    return (timeout, interval) => {
+      return this.waitForTestFn(() => {
+        const name = this.status?.clusterName;
+
+        return name && !!this.$getters['byId'](MANAGEMENT.CLUSTER, name);
+      }, `mgmt cluster create`, timeout, interval);
+    };
   },
 
   provisioner() {
@@ -119,28 +171,28 @@ export default {
     }
   },
 
-  nodeProvider() {
+  machineProvider() {
     if ( this.isImported ) {
       return null;
     } else if ( this.isRke2 ) {
-      const kind = this.spec?.rkeConfig?.nodePools?.[0]?.nodeConfigRef?.kind?.toLowerCase();
+      const kind = this.spec?.rkeConfig?.machinePools?.[0]?.machineConfigRef?.kind?.toLowerCase();
 
       if ( kind ) {
         return kind.replace(/config$/i, '').toLowerCase();
       }
 
       return null;
-    } else if ( this.mgmt?.nodeProvider ) {
-      return this.mgmt.nodeProvider.toLowerCase();
+    } else if ( this.mgmt?.machineProvider ) {
+      return this.mgmt.machineProvider.toLowerCase();
     }
   },
 
-  nodeProviderDisplay() {
+  machineProviderDisplay() {
     if ( this.isImported ) {
       return null;
     }
 
-    const provider = (this.nodeProvider || '').toLowerCase();
+    const provider = (this.machineProvider || '').toLowerCase();
 
     if ( provider ) {
       return this.$rootGetters['i18n/withFallback'](`cluster.provider."${ provider }"`, null, provider);
@@ -216,6 +268,8 @@ export default {
 
   getOrCreateToken() {
     return async() => {
+      await this.waitForMgmt();
+
       if ( !this.mgmt ) {
         return;
       }
@@ -263,7 +317,7 @@ export default {
 
   etcdSnapshots() {
     return (this.status?.etcdSnapshots || []).map((x) => {
-      x.id = x._name;
+      x.id = x.name || x._name;
       x.type = 'etcdBackup';
       x.state = 'active';
       x.clusterId = this.id;
@@ -272,4 +326,40 @@ export default {
       return proxyFor(this.$ctx, x);
     });
   },
+
+  saveAsRKETemplate() {
+    return (resources = this) => {
+      this.$dispatch('promptModal', {
+        resources,
+        component: 'SaveAsRKETemplateDialog'
+      });
+    };
+  },
+
+  rotateCertificates() {
+    return (resources = this) => {
+      this.$dispatch('promptModal', {
+        resources,
+        component: 'RotateCertificatesDialog'
+      });
+    };
+  },
+
+  rotateEncryptionKey() {
+    return (resources = this) => {
+      this.$dispatch('promptModal', {
+        resources,
+        component: 'RotateEncryptionKeyDialog'
+      });
+    };
+  },
+
+  stateObj() {
+    if (!this.isRke2) {
+      return this.mgmt?.stateObj || this.metadata?.state;
+    }
+
+    return this.metadata?.state;
+  },
+
 };

@@ -12,14 +12,17 @@ export const STEVE = {
 // Auth (via Norman)
 // Base: /v3
 export const NORMAN = {
-  AUTH_CONFIG:   'authconfig',
-  ETCD_BACKUP:   'etcdbackup',
-  CLUSTER_TOKEN: 'clusterregistrationtoken',
-  GROUP:         'group',
-  PRINCIPAL:     'principal',
-  SPOOFED:       { GROUP_PRINCIPAL: 'group.principal' },
-  TOKEN:         'token',
-  USER:          'user',
+  AUTH_CONFIG:                   'authconfig',
+  ETCD_BACKUP:                   'etcdbackup',
+  CLUSTER_TOKEN:                 'clusterregistrationtoken',
+  CLUSTER_ROLE_TEMPLATE_BINDING: 'clusterRoleTemplateBinding',
+  GROUP:                         'group',
+  PRINCIPAL:                     'principal',
+  PROJECT:                       'project',
+  PROJECT_ROLE_TEMPLATE_BINDING: 'projectRoleTemplateBinding',
+  SPOOFED:                       { GROUP_PRINCIPAL: 'group.principal' },
+  TOKEN:                         'token',
+  USER:                          'user',
 };
 
 // Public (via Norman)
@@ -149,11 +152,12 @@ export const MANAGEMENT = {
 };
 
 export const CAPI = {
-  CAPI_CLUSTER:       'cluster.x-k8s.io.cluster',
-  MACHINE_DEPLOYMENT: 'cluster.x-k8s.io.machinedeployment',
-  MACHINE_SET:        'cluster.x-k8s.io.machineset',
-  MACHINE:            'cluster.x-k8s.io.machine',
-  RANCHER_CLUSTER:    'provisioning.cattle.io.cluster',
+  CAPI_CLUSTER:         'cluster.x-k8s.io.cluster',
+  MACHINE_DEPLOYMENT:   'cluster.x-k8s.io.machinedeployment',
+  MACHINE_SET:          'cluster.x-k8s.io.machineset',
+  MACHINE:              'cluster.x-k8s.io.machine',
+  RANCHER_CLUSTER:      'provisioning.cattle.io.cluster',
+  MACHINE_CONFIG_GROUP: 'rke-machine-config.cattle.io',
 };
 
 // --------------------------------------
@@ -244,6 +248,12 @@ export const CIS = {
 };
 
 export const UI = { NAV_LINK: 'ui.cattle.io.navlink' };
+
+export const VIRTUAL_TYPES = {
+  CLUSTER_MEMBERS:    'cluster-members',
+  PROJECT_NAMESPACES: 'projects-namespaces',
+  NAMESPACES:         'namespaces'
+};
 
 // harvester
 export const HCI = {

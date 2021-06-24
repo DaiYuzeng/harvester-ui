@@ -5,6 +5,8 @@ import { mapPref, DEV, EXPANDED_GROUPS, FAVORITE_TYPES } from '@/store/prefs';
 import ActionMenu from '@/components/ActionMenu';
 import WindowManager from '@/components/nav/WindowManager';
 import PromptRemove from '@/components/PromptRemove';
+import PromptRestore from '@/components/PromptRestore';
+import PromptModal from '@/components/PromptModal';
 import AssignTo from '@/components/AssignTo';
 import EjectCDROM from '@/components/EjectCDROM/index';
 import Group from '@/components/nav/Group';
@@ -25,6 +27,8 @@ export default {
     AssignTo,
     EjectCDROM,
     PureHeader,
+    PromptRestore,
+    PromptModal,
     ActionMenu,
     Group,
     WindowManager,
@@ -198,10 +202,50 @@ export default {
           }
         }
       }
+
+      if ( this.isExplorer ) {
+        const allNavLinks = this.allNavLinks;
+        const toAdd = [];
+        const haveGroup = {};
+
+        for ( const obj of allNavLinks ) {
+          const groupLabel = obj.spec.group;
+          const groupSlug = obj.normalizedGroup;
+
+          if ( !obj.link ) {
+            continue;
+          }
+
+          const entry = {
+            name:        `link-${ obj._key }`,
+            link:        obj.link,
+            target:      obj.actualTarget,
+            label:       obj.labelDisplay,
+            sideLabel:   obj.spec.sideLabel,
+            iconSrc:     obj.spec.iconSrc,
+            description: obj.spec.description,
+          };
+
+          // If there's a spec.group (groupLabel), all entries with that name go under one nav group
+          if ( groupSlug ) {
+            if ( haveGroup[groupSlug] ) {
+              continue;
+            }
+          }
+        }
+      }
       replaceWith(this.groups, ...sortBy(out, ['weight:desc', 'label']));
     },
     expanded(name) {
       const currentType = this.$route.params.resource || '';
+
+      if (!currentType) {
+        const grp = this.groups.find(item => item.name === name);
+
+        if (grp?.children) {
+          return this.hasRoute(grp.children);
+        }
+      }
 
       return name === currentType;
     },
@@ -220,6 +264,21 @@ export default {
         });
       }
     },
+
+    hasRoute(grp) {
+      return !!grp.find((item) => {
+        if (item.children) {
+          return this.hasRoute(item.children);
+        } else if (item.route) {
+          const route = this.$router.resolve(item.route);
+
+          return this.$route.fullPath === route.href;
+        }
+
+        return false;
+      });
+    },
+
     wheresMyDebugger() {
       // vue-shortkey is preventing F8 from passing through to the browser... this works for now.
       // eslint-disable-next-line no-debugger
@@ -253,53 +312,59 @@ export default {
 };
 </script>
 <template>
-  <div v-if="managementReady" class="dashboard-root">
-    <PureHeader />
-    <nav v-if="clusterReady" class="side-nav">
-      <div class="nav">
-        <template v-for="(g, idx) in groups">
-          <Group
-            ref="groups"
-            :key="idx"
-            id-prefix=""
-            class="package"
-            :expanded="expanded"
-            :group="g"
-            :can-collapse="!g.isRoot"
-            :show-header="!g.isRoot"
-            @on-toggle="toggle"
-          >
-            <template #header>
-              <h6>{{ g.label }}</h6>
-            </template>
-          </Group>
-        </template>
+  <div class="dashboard-root">
+    <FixedBanner />
+
+    <div v-if="managementReady" class="dashboard-content">
+      <PureHeader />
+      <nav v-if="clusterReady" class="side-nav">
+        <div class="nav">
+          <template v-for="(g, idx) in groups">
+            <Group
+              ref="groups"
+              :key="idx"
+              id-prefix=""
+              class="package"
+              :expanded="expanded"
+              :group="g"
+              :can-collapse="!g.isRoot"
+              :show-header="!g.isRoot"
+              @on-toggle="toggle"
+            >
+              <template #header>
+                <h6>{{ g.label }}</h6>
+              </template>
+            </Group>
+          </template>
+        </div>
+        <!-- <n-link v-if="isExplorer" tag="div" class="tools" :to="{name: 'c-cluster-explorer-tools', params: {cluster: clusterId}}">
+          <a class="tools-button" @click="collapseAll()">
+            <i class="icon icon-gear" />
+            <span>{{ t('nav.clusterTools') }}</span>
+          </a>
+        </n-link> -->
+        <div class="version text-muted">
+          {{ displayVersion }}
+        </div>
+      </nav>
+      <main v-if="clusterReady">
+        <nuxt class="outlet" />
+        <Footer />
+        <ActionMenu />
+        <PromptRemove />
+        <PromptRestore />
+        <AssignTo />
+        <PromptModal />
+        <EjectCDROM />
+        <ServerUrlModal />
+        <button v-if="dev" v-shortkey.once="['shift','l']" class="hide" @shortkey="toggleNoneLocale()" />
+        <button v-if="dev" v-shortkey.once="['shift','t']" class="hide" @shortkey="toggleTheme()" />
+        <button v-shortkey.once="['f8']" class="hide" @shortkey="wheresMyDebugger()" />
+        <!-- <button v-shortkey.once="['`']" class="hide" @shortkey="toggleShell" /> -->
+      </main>
+      <div class="wm">
+        <WindowManager />
       </div>
-      <!-- <n-link tag="div" class="tools" :to="{name: 'c-cluster-explorer-tools'}">
-        <a class="tools-button" @click="collapseAll()">
-          <i class="icon icon-gear" />
-          <span>{{ t('nav.clusterTools') }}</span>
-        </a>
-      </n-link> -->
-      <div class="version text-muted">
-        {{ displayVersion }}
-      </div>
-    </nav>
-    <main v-if="clusterReady">
-      <nuxt class="outlet" />
-      <Footer />
-      <ActionMenu />
-      <PromptRemove />
-      <AssignTo />
-      <EjectCDROM />
-      <ServerUrlModal />
-      <button v-if="dev" v-shortkey.once="['shift','l']" class="hide" @shortkey="toggleNoneLocale()" />
-      <button v-if="dev" v-shortkey.once="['shift','t']" class="hide" @shortkey="toggleTheme()" />
-      <button v-shortkey.once="['f8']" class="hide" @shortkey="wheresMyDebugger()" />
-      <!-- <button v-shortkey.once="['`']" class="hide" @shortkey="toggleShell" /> -->
-    </main>
-    <div class="wm">
-      <WindowManager />
     </div>
   </div>
 </template>
@@ -426,5 +491,6 @@ export default {
   .wm {
     grid-area: wm;
     overflow-y: hidden;
+    z-index: 1;
   }
 </style>

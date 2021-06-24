@@ -149,6 +149,10 @@ export default {
       return () => popper.destroy();
     },
 
+    focus() {
+      this.focusSearch();
+    },
+
     focusSearch() {
       this.$nextTick(() => {
         const el = this.$refs['select-input']?.searchEl;
@@ -224,6 +228,7 @@ export default {
     />
   </div>
 </template>
+
 <style lang="scss" scoped>
   .unlabeled-select {
     position: relative;

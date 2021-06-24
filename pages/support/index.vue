@@ -9,7 +9,7 @@ import { MANAGEMENT } from '@/config/types';
 import { getVendor } from '@/config/private-label';
 import { SETTING } from '@/config/settings';
 
-const KEY_REGX = /^[0-9a-fA-F]{8}$/;
+const KEY_REGX = /^[0-9a-fA-F]{16}$/;
 
 export default {
   layout: 'home',
@@ -46,17 +46,20 @@ export default {
 
     this.supportSetting = await fetchOrCreateSetting('has-support', 'false');
     this.brandSetting = await fetchOrCreateSetting(SETTING.BRAND, '');
+    this.communitySetting = await fetchOrCreateSetting(SETTING.COMMUNITY_LINKS, 'true');
+
     this.uiIssuesSetting = await this.$store.dispatch('management/find', { type: MANAGEMENT.SETTING, id: SETTING.ISSUES });
   },
 
   data() {
     return {
-      vendor:          getVendor(),
-      supportKey:      '',
-      supportSetting:  null,
-      brandSetting:    null,
-      uiIssuesSetting: null,
-      promos:          [
+      vendor:               getVendor(),
+      supportKey:           '',
+      supportSetting:       null,
+      brandSetting:         null,
+      uiIssuesSetting:      null,
+      communitySetting: null,
+      promos:               [
         'support.promos.one',
         'support.promos.two',
         'support.promos.three',
@@ -71,7 +74,7 @@ export default {
     },
 
     options() {
-      return options(this.vendor, this.uiIssuesSetting?.value);
+      return options( this.uiIssuesSetting?.value, this.communitySetting?.value === 'false');
     },
 
     title() {
@@ -114,7 +117,16 @@ export default {
 
     showDialog(isAdd) {
       this.isRemoveDialog = isAdd;
+      this.supportKey = '';
       this.$modal.show('toggle-support');
+    },
+
+    dialogOpened() {
+      const input = this.$refs.subscriptionIDInput;
+
+      if (input) {
+        input.focus();
+      }
     }
   }
 };
@@ -172,6 +184,7 @@ export default {
       name="toggle-support"
       height="auto"
       :width="340"
+      @opened="dialogOpened"
     >
       <Card :show-highlight-border="false" class="toogle-support">
         <template #title>
@@ -182,7 +195,10 @@ export default {
             {{ t('support.subscription.removeBody') }}
           </div>
           <div v-else class="mt-20">
-            <input v-model="supportKey" />
+            <p class="pb-10">
+              {{ t('support.subscription.addLabel') }}
+            </p>
+            <input ref="subscriptionIDInput" v-model="supportKey" />
           </div>
         </template>
         <template #actions>

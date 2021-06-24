@@ -13,6 +13,7 @@ import { MANAGEMENT } from '@/config/types';
 import { getVendor, setVendor } from '@/config/private-label';
 import { SETTING, fetchOrCreateSetting } from '@/config/settings';
 const Color = require('color');
+const parse = require('url-parse');
 
 export default {
   layout: 'authenticated',
@@ -23,12 +24,13 @@ export default {
 
   async fetch() {
     const hash = await allHash({
-      uiPLSetting:        this.$store.dispatch('management/find', { type: MANAGEMENT.SETTING, id: SETTING.PL }),
-      uiIssuesSetting:    this.$store.dispatch('management/find', { type: MANAGEMENT.SETTING, id: SETTING.ISSUES }),
-      uiBannerSetting:    this.$store.dispatch('management/find', { type: MANAGEMENT.SETTING, id: SETTING.BANNERS }),
-      uiLogoDarkSetting:  fetchOrCreateSetting(this.$store, SETTING.LOGO_DARK, ''),
-      uiLogoLightSetting: fetchOrCreateSetting(this.$store, SETTING.LOGO_LIGHT, ''),
-      uiColorSetting:     fetchOrCreateSetting(this.$store, SETTING.PRIMARY_COLOR, ''),
+      uiPLSetting:            this.$store.dispatch('management/find', { type: MANAGEMENT.SETTING, id: SETTING.PL }),
+      uiIssuesSetting:        this.$store.dispatch('management/find', { type: MANAGEMENT.SETTING, id: SETTING.ISSUES }),
+      uiBannerSetting:        this.$store.dispatch('management/find', { type: MANAGEMENT.SETTING, id: SETTING.BANNERS }),
+      uiLogoDarkSetting:      fetchOrCreateSetting(this.$store, SETTING.LOGO_DARK, ''),
+      uiLogoLightSetting:     fetchOrCreateSetting(this.$store, SETTING.LOGO_LIGHT, ''),
+      uiColorSetting:         fetchOrCreateSetting(this.$store, SETTING.PRIMARY_COLOR, ''),
+      uiCommunitySetting:     fetchOrCreateSetting(this.$store, SETTING.COMMUNITY_LINKS, 'true'),
     });
 
     Object.assign(this, hash);
@@ -61,13 +63,6 @@ export default {
   },
 
   data() {
-    let uiColor = getComputedStyle(document.body).getPropertyValue('--primary');
-    const suse = document.querySelector('.suse');
-
-    if (suse) {
-      uiColor = getComputedStyle(suse).getPropertyValue('--primary');
-    }
-
     return {
       vendor:      getVendor(),
       uiPLSetting: {},
@@ -84,8 +79,10 @@ export default {
       customizeLogo:      false,
 
       uiColorSetting: {},
-      uiColor,
+      uiColor:        null,
       customizeColor: false,
+
+      uiCommunitySetting: {},
 
       errors: []
     };
@@ -93,12 +90,44 @@ export default {
 
   watch: {},
 
+  mounted() {
+    let uiColor = getComputedStyle(document.body).getPropertyValue('--primary');
+    const suse = document.querySelector('.suse');
+
+    if (suse) {
+      uiColor = getComputedStyle(suse).getPropertyValue('--primary');
+    }
+
+    // Only set the color to the default if not already set from the custom color
+    this.uiColor = this.uiColor || uiColor.trim();
+  },
+
   methods: {
     updateLogo(img, key) {
       this[key] = img;
     },
 
+    setError(e) {
+      this.errors = [];
+      this.errors.push(e);
+    },
+
+    validateUrl(url) {
+      const parsed = parse(url, {});
+
+      if (!parsed.protocol) {
+        this.errors.push(this.t('branding.uiIssues.invalidUrl'));
+
+        return false;
+      }
+
+      return true;
+    },
+
     async save(btnCB) {
+      if (this.uiIssuesSetting.value && !this.validateUrl(this.uiIssuesSetting.value)) {
+        return btnCB(false);
+      }
       this.uiBannerSetting.value = JSON.stringify(this.bannerVal);
       if (this.customizeLogo) {
         this.uiLogoLightSetting.value = this.uiLogoLight;
@@ -114,24 +143,28 @@ export default {
         this.uiColorSetting.value = null;
       }
 
+      this.errors = [];
+
       try {
-        await Promise.all([this.uiPLSetting.save(),
+        await Promise.all([
+          this.uiPLSetting.save(),
           this.uiIssuesSetting.save(),
           this.uiBannerSetting.save(),
           this.uiLogoDarkSetting.save(),
           this.uiLogoLightSetting.save(),
-          this.uiColorSetting.save()]);
+          this.uiColorSetting.save(),
+          this.uiCommunitySetting.save()
+        ]);
         if (this.uiPLSetting.value !== this.vendor) {
           setVendor(this.uiPLSetting.value);
         }
-        this.errors = [];
         btnCB(true);
       } catch (err) {
         this.errors.push(err);
         btnCB(false);
       }
-    }
-  },
+    },
+  }
 };
 </script>
 
@@ -147,14 +180,23 @@ export default {
           <LabeledInput v-model="uiPLSetting.value" :label="t('branding.uiPL.label')" />
         </div>
       </div>
-      <div class="mb-20">
+
+      <h3 class="mt-40 mb-5 pb-5">
+        {{ t('branding.uiIssues.label') }}
+      </h3>
+      <label class="text-label">
+        {{ t(`advancedSettings.descriptions.${ 'ui-issues' }`, {}, true) }}
+      </label>
+      <div :style="{'align-items':'center'}" class="row mt-10">
         <div class="col span-6 pb-5">
-          <LabeledInput v-model="uiIssuesSetting.value" :label="t('branding.uiIssues.label')" />
+          <LabeledInput v-model="uiIssuesSetting.value" :label="t('branding.uiIssues.issuesUrl')" />
         </div>
-        <span class="text-label">{{ t(`advancedSettings.descriptions.${ 'ui-issues' }`, {}, true) }}</span>
+        <div class="col span-6">
+          <Checkbox :value="uiCommunitySetting.value === 'true'" :label="t('branding.uiIssues.communityLinks')" @input="e=>$set(uiCommunitySetting, 'value', e.toString())" />
+        </div>
       </div>
 
-      <h3 class="mt-20 mb-5 pb-5">
+      <h3 class="mt-40 mb-5 pb-5">
         {{ t('branding.logos.label') }}
       </h3>
       <label class="text-label">
@@ -173,7 +215,7 @@ export default {
               :read-as-data-url="true"
               class="role-secondary"
               :label="t('branding.logos.uploadLight')"
-              @error="e=>errors.push(e)"
+              @error="setError"
               @selected="updateLogo($event, 'uiLogoLight')"
             />
           </div>
@@ -189,7 +231,7 @@ export default {
               :read-as-data-url="true"
               class="role-secondary"
               :label="t('branding.logos.uploadDark')"
-              @error="e=>errors.push(e)"
+              @error="setError"
               @selected="updateLogo($event, 'uiLogoDark')"
             />
           </div>
@@ -213,7 +255,7 @@ export default {
         <ColorInput v-model="uiColor" />
       </div>
 
-      <h3 class="mb-5 pb-5">
+      <h3 class="mb-5 pb-5 mt-40">
         {{ t('branding.uiBanner.label') }}
       </h3>
       <label class="text-label">

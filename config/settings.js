@@ -19,6 +19,8 @@ export const SETTING = {
   CA_CERTS: 'cacerts',
 
   AUTH_TOKEN_MAX_TTL_MINUTES:       'auth-token-max-ttl-minutes',
+  KUBECONFIG_GENERATE_TOKEN:        'kubeconfig-generate-token',
+  KUBECONFIG_TOKEN_TTL_MINUTES:     'kubeconfig-token-ttl-minutes',
   ENGINE_URL:                       'engine-install-url',
   ENGINE_ISO_URL:                   'engine-iso-url',
   FIRST_LOGIN:                      'first-login',
@@ -32,8 +34,11 @@ export const SETTING = {
   AUTH_USER_INFO_RESYNC_CRON:       'auth-user-info-resync-cron',
   AUTH_LOCAL_VALIDATE_DESC:         'auth-password-requirements-description',
   CLUSTER_TEMPLATE_ENFORCEMENT:     'cluster-template-enforcement',
-  UI_INDEX:                       'ui-index',
-  SYSTEM_DEFAULT_REGISTRY:        'system-default-registry',
+  UI_INDEX:                         'ui-index',
+  UI_DASHBOARD_INDEX:               'ui-dashboard-index',
+  UI_OFFLINE_PREFERRED:             'ui-offline-preferred',
+  SYSTEM_DEFAULT_REGISTRY:          'system-default-registry',
+  UI_ISSUES:                        'ui-issues',
   PL:                               'ui-pl',
   PL_RANCHER_VALUE:                 'rancher',
   SUPPORTED:                        'has-support',
@@ -42,7 +47,8 @@ export const SETTING = {
   BRAND:                            'ui-brand',
   LOGO_LIGHT:                       'ui-logo-light',
   LOGO_DARK:                        'ui-logo-dark',
-  PRIMARY_COLOR:                    'ui-primary-color'
+  PRIMARY_COLOR:                    'ui-primary-color',
+  COMMUNITY_LINKS:                  'ui-community-links'
 };
 
 // These are the settings that are allowed to be edited via the UI
@@ -57,12 +63,19 @@ export const ALLOWED_SETTINGS = {
   [SETTING.AUTH_USER_INFO_MAX_AGE_SECONDS]: {},
   [SETTING.AUTH_USER_SESSION_TTL_MINUTES]:  {},
   [SETTING.AUTH_TOKEN_MAX_TTL_MINUTES]:     {},
+  [SETTING.KUBECONFIG_GENERATE_TOKEN]:      { kind: 'boolean' },
+  [SETTING.KUBECONFIG_TOKEN_TTL_MINUTES]:   {},
   [SETTING.AUTH_USER_INFO_RESYNC_CRON]:     {},
   [SETTING.SERVER_URL]:                     { kind: 'url' },
   [SETTING.RKE_METADATA_CONFIG]:            { kind: 'json' },
   // [SETTING.BANNERS]:                        { kind: 'json' },
   [SETTING.SYSTEM_DEFAULT_REGISTRY]:        {},
   [SETTING.UI_INDEX]:                       {},
+  [SETTING.UI_DASHBOARD_INDEX]:             {},
+  [SETTING.UI_OFFLINE_PREFERRED]:           {
+    kind:    'enum',
+    options: ['dynamic', 'true', 'false']
+  },
   [SETTING.BRAND]:                          {},
   [SETTING.CLUSTER_TEMPLATE_ENFORCEMENT]:   { kind: 'boolean' },
 

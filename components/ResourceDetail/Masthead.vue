@@ -149,21 +149,21 @@ export default {
     },
 
     banner() {
-      if (this.value?.metadata?.state?.error) {
+      if (this.value?.stateObj?.error) {
         const defaultErrorMessage = this.t('resourceDetail.masthead.defaultBannerMessage.error', undefined, true);
 
         return {
           color:   'error',
-          message: this.value.metadata.state.message || defaultErrorMessage
+          message: this.value.stateObj.message || defaultErrorMessage
         };
       }
 
-      if (this.value?.metadata?.state?.transitioning) {
+      if (this.value?.stateObj?.transitioning) {
         const defaultTransitioningMessage = this.t('resourceDetail.masthead.defaultBannerMessage.transitioning', undefined, true);
 
         return {
           color:   'info',
-          message: this.value.metadata.state.message || defaultTransitioningMessage
+          message: this.value.stateObj.message || defaultTransitioningMessage
         };
       }
 
@@ -323,7 +323,8 @@ export default {
               {{ parent.displayName }}:
             </nuxt-link>
             <span v-else>{{ parent.displayName }}:</span>
-            <t :k="'resourceDetail.header.' + title" :subtype="resourceSubtype" :name="value.nameDisplay" />
+            <span v-if="value.detailPageHeaderActionOverride && value.detailPageHeaderActionOverride(realMode)">{{ value.detailPageHeaderActionOverride(realMode) }}</span>
+            <t v-else :k="'resourceDetail.header.' + realMode" :subtype="resourceSubtype" :name="value.nameDisplay" />
             <BadgeState v-if="!isCreate && parent.showState" class="masthead-state" :value="value" />
           </h1>
         </div>
@@ -381,9 +382,9 @@ export default {
 
 <style lang='scss' scoped>
   .masthead {
-    padding-bottom: 5px;
+    padding-bottom: 10px;
     border-bottom: 1px solid var(--border);
-    margin-bottom: 5px;
+    margin-bottom: 10px;
   }
 
   HEADER {

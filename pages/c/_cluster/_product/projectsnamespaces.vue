@@ -2,11 +2,11 @@
 import ResourceTable from '@/components/ResourceTable';
 import { STATE, AGE, SIMPLE_NAME } from '@/config/table-headers';
 import { uniq } from '@/utils/array';
-import { MANAGEMENT, NAMESPACE } from '@/config/types';
+import { MANAGEMENT, NAMESPACE, VIRTUAL_TYPES } from '@/config/types';
 import Loading from '@/components/Loading';
 import { PROJECT_ID } from '@/config/query-params';
 import Masthead from '@/components/ResourceList/Masthead';
-import { mapPref, GROUP_RESOURCES } from '@/store/prefs';
+import { mapPref, GROUP_RESOURCES, DEV } from '@/store/prefs';
 import MoveModal from '@/components/MoveModal';
 
 export default {
@@ -29,17 +29,18 @@ export default {
       return;
     }
 
-    this.rows = await this.$store.dispatch(`${ inStore }/findAll`, { type: NAMESPACE });
-    this.projects = await this.$store.dispatch('management/findAll', { type: MANAGEMENT.PROJECT });
+    this.namespaces = await this.$store.dispatch(`${ inStore }/findAll`, { type: NAMESPACE });
+    this.projects = await this.$store.dispatch('management/findAll', { type: MANAGEMENT.PROJECT, opt: { force: true } });
   },
 
   data() {
     return {
       schema:        null,
-      rows:          [],
+      namespaces:    [],
       projects:      [],
       projectSchema: null,
       MANAGEMENT,
+      VIRTUAL_TYPES
     };
   },
 
@@ -66,8 +67,14 @@ export default {
 
       return uniq(ids);
     },
+    clusterProjects() {
+      const clusterId = this.$store.getters['currentCluster'].id;
+
+      return this.projects.filter(project => project.spec.clusterName === clusterId);
+    },
     projectsWithoutNamespaces() {
-      return this.projects.filter(project => !this.projectIdsWithNamespaces.includes(project.name));
+      return this.clusterProjects
+        .filter(project => !this.projectIdsWithNamespaces.includes(project.name));
     },
     // We're using this because we need to show projects as groups even if the project doesn't have any namespaces.
     rowsWithFakeNamespaces() {
@@ -95,6 +102,13 @@ export default {
     groupPreference: mapPref(GROUP_RESOURCES),
     filteredRows() {
       return this.groupPreference === 'none' ? this.rows : this.rowsWithFakeNamespaces;
+    },
+    rows() {
+      if (this.$store.getters['prefs/get'](DEV)) {
+        return this.namespaces;
+      }
+
+      return this.namespaces.filter(namespace => !namespace.isObscure);
     }
   },
   methods: {
@@ -155,6 +169,7 @@ export default {
       :schema="projectSchema"
       :type-display="t('projectNamespaces.label')"
       :resource="MANAGEMENT.PROJECT"
+      :favorite-resource="VIRTUAL_TYPES.PROJECT_NAMESPACES"
       :create-location="createProjectLocation"
       :create-button-label="t('projectNamespaces.createProject')"
     />

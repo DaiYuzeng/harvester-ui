@@ -117,7 +117,7 @@ export default {
       }
     },
     toggleLocal() {
-      this.showLocal = true;
+      this.showLocal = !this.showLocal;
       this.$router.applyQuery({ [LOCAL]: _FLAGGED });
       this.$nextTick(() => {
         this.focusSomething();
@@ -289,7 +289,8 @@ export default {
           />
         </div>
       </div>
-      <div class="col span-6 landscape"></div>
+
+      <BrandImage class="col span-6 landscape" file-name="login-landscape.svg" />
     </div>
   </main>
 </template>
@@ -328,11 +329,13 @@ export default {
       width: 50%;
     }
     .landscape {
-      background-image: url('~assets/images/login-landscape.svg');
-      background-repeat: no-repeat;
-      background-size: cover;
-      background-position: center center;
       height: 100vh;
+      margin: 0;
+      object-fit: cover;
+    }
+
+    .login-messages {
+      height: 20px
     }
   }
 </style>
