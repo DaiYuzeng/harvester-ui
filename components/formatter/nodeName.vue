@@ -17,7 +17,9 @@ export default {
 
   computed: {
     nodeName() {
-      return this.node?.nameDisplay || '';
+      const nodeName = this.vmi?.status?.nodeName;
+
+      return this.node?.nameDisplay || nodeName;
     },
 
     vmi() {

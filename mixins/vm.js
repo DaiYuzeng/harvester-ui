@@ -38,7 +38,10 @@ const baseSpec = {
           }],
           disks: [],
         },
-        resources: { requests: { memory: null } }
+        resources: {
+          requests: { memory: null, cpu: '' },
+          limits: { memory: null, cpu: '' }
+        }
       },
       hostname: '',
       networks: [{
