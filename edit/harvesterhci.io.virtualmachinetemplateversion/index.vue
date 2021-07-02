@@ -222,6 +222,9 @@ export default {
 
     updateCpuMemory(cpu, memory) {
       this.$set(this.spec.template.spec.domain.cpu, 'cores', cpu);
+      this.$set(this.spec.template.spec.domain.resources.requests, 'cpu', cpu);
+      this.$set(this.spec.template.spec.domain.resources.limits, 'memory', memory);
+      this.$set(this.spec.template.spec.domain.resources.limits, 'cpu', cpu);
       this.$set(this, 'memory', memory);
     },
 
